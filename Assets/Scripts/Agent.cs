@@ -10,11 +10,7 @@ public class Agent : MonoBehaviour
 {
     
     private float DefaultTargetRadius = 10.0f;
-    [NonSerialized]
-    public static float TimeStep = 2f;
-    public static float GenerationTime = 5f;
-    public static float AverageSpeed = 5.0f;
-    public static float MaxSpeed = 100.0f;
+
 
     private Rigidbody _rigidbody;
 
@@ -29,14 +25,17 @@ public class Agent : MonoBehaviour
 
     private Vector3 _lastPosition;
 
-    [NonSerialized]
-    public bool isDead = false;
+    public bool isDead { get { return _isDead; } set { _isDead = value; if (agentData != null) agentData.isDead = value; } }
+
+    private bool _isDead = false;
+
     [NonSerialized]
     public bool hasReachedGoal = false;
     [NonSerialized]
     public bool CanSeeGoal = false;
 
-    public List<float> DNA = new();
+    [NonSerialized]
+    public AgentData agentData;
 
     public float LifeTime { get; private set; }
 
@@ -52,25 +51,16 @@ public class Agent : MonoBehaviour
 
     RaycastHit[] hitColliders = new RaycastHit[3];
 
-    // Start is called before the first frame update
-    void Start()
-    {
-        //_rigidbody = this.GetComponent<Rigidbody>();
-
-        if (DNA.Count == 0)
-        {
-            System.Random random = new System.Random();
-            DNA = Enumerable.Range(0, Mathf.RoundToInt(GenerationTime / TimeStep)).Select(x => GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f)).ToList();
-            DNA.Insert(0, AverageSpeed);
-            DNA[0] = Mathf.Clamp(DNA[0], 1f, MaxSpeed);
-        }
-
-
-    }
+    public bool isResetting = false;
 
     private void OnEnable()
     {
-
+        if (isResetting)
+        {
+            this.agentData.ResetDNA();
+            isResetting = false;
+            this.isDead = false;
+        }
 
         if (_target == null)
             _target = new GameObject(this.gameObject.name + "_Target");
@@ -95,7 +85,8 @@ public class Agent : MonoBehaviour
     private void OnDisable()
     {
         StopAllCoroutines();
-        if (Goal != null)
+
+        if (Goal != null && !isResetting)
         {
             if (Physics.Raycast(_lastPosition, Goal.transform.position - this.transform.position, out RaycastHit hit, 1000f, LayerMask.GetMask(new string[] { "Goal", "Wall" })))
             {
@@ -126,12 +117,12 @@ public class Agent : MonoBehaviour
         toAngle = 0.0f;
         LifeTime = 0.0f;
 
-        while (DNA.Count == 0)
+        while (this.agentData != null && agentData.DNA.Count == 0)
         {
             yield return null;
         }
 
-        List<float> Angles = DNA.GetRange(1, DNA.Count - 1);
+        List<float> Angles = agentData.DNA.GetRange(1, agentData.DNA.Count - 1);
 
         PositionsAtTimestep.Add(GetCurrentCellPosition());
 
@@ -143,27 +134,30 @@ public class Agent : MonoBehaviour
             {
                 float newDeltaAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f);
                 Angles.Add(newDeltaAngle);
-                DNA.Add(newDeltaAngle);
+                agentData.AddGene(newDeltaAngle);
             }
             
 
 
             toAngle = fromAngle + Angles[index];
+            this.agentData.DeathIndex = index;
             index++;
+
             t = 0.0f;
             float timeSinceLastStep = 0.0f;
 
 
-            while (timeSinceLastStep < TimeStep)
+            while (timeSinceLastStep < AgentData.TimeStep)
             {
                 TraceRays();
                 MoveAgent();
+
                 timeSinceLastStep += Time.deltaTime;
                 yield return null;
             }
             PositionsAtTimestep.Add(GetCurrentCellPosition());
             _lastPosition = this.transform.position;
-            LifeTime += TimeStep;
+            LifeTime += AgentData.TimeStep;
             fromAngle = toAngle;
 
         }
@@ -185,17 +179,6 @@ public class Agent : MonoBehaviour
         return new Vector2Int(xCell, zCell);
     }
 
-    private void Update()
-    {
-
-    }
-
-    //private void FixedUpdate()
-    //{
-    //    TraceRays();
-    //    MoveAgent();
-    //    TraceRays();
-    //}
 
     private void MoveAgent()
     {
@@ -204,9 +187,9 @@ public class Agent : MonoBehaviour
         MoveTarget(radius);
         this.transform.LookAt(_target.transform);
         KeepDistance(radius);
-        if (speed > MaxSpeed)
+        if (speed > AgentData.MaxSpeed)
         {
-            speed = MaxSpeed;
+            speed = AgentData.MaxSpeed;
         }
 
         this.transform.Translate(Vector3.forward * speed * Time.deltaTime);
@@ -214,8 +197,9 @@ public class Agent : MonoBehaviour
 
     private void TraceRays()
     {
+
         var speed = GetSpeed();
-        speed = Mathf.Max(speed, MaxSpeed);
+        speed = Mathf.Max(speed, AgentData.MaxSpeed);
 
 
         var nHits = Physics.BoxCastNonAlloc(this.transform.position, this.transform.localScale, transform.forward, hitColliders, transform.rotation, speed * Time.deltaTime, LayerMask.GetMask(new string[] { "Goal", "Wall" }));
@@ -242,7 +226,7 @@ public class Agent : MonoBehaviour
 
     private float GetSpeed()
     {
-        float multiplier = DNA.Count > 0 ? DNA[0] : AverageSpeed;
+        float multiplier = agentData.DNA.Count > 0 ? agentData.DNA[0] : AgentData.AverageSpeed;
 
         Vector3 velocity = _target.transform.position - this.transform.position;
         velocity.y = 0;
@@ -254,7 +238,7 @@ public class Agent : MonoBehaviour
 
     private void MoveTarget(float radius)
     {
-        float angle = Mathf.Lerp(fromAngle, toAngle, t/TimeStep);
+        float angle = Mathf.Lerp(fromAngle, toAngle, t/AgentData.TimeStep);
         t += Time.deltaTime;
 
         // Calculate the target's position within the circle around the agent

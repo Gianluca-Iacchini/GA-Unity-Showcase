@@ -1,5 +1,7 @@
 using UnityEngine;
 using System;
+using System.Linq;
+using System.Collections.Generic;
 
 public class GaussianDistribution
 {
@@ -16,5 +18,26 @@ public class GaussianDistribution
 
         // Scale and shift the value to match the desired mean and standard deviation
         return (float)(mean + z0 * standardDeviation);
+    }
+
+    public static int RandomlySelectElement(int N)
+    {
+        double[] probabilities = Enumerable.Range(0, N).Select((_, i) => Math.Pow(2, i + 1)).ToArray();
+        double sum = probabilities.Sum();
+
+        double randomValue = new System.Random().NextDouble() * sum;
+        double cumulativeProbability = 0;
+
+        for (int i = 0; i < N; i++)
+        {
+            cumulativeProbability += probabilities[i];
+
+            if (randomValue <= cumulativeProbability)
+            {
+                return i;
+            }
+        }
+
+        return System.Math.Max(N - 1, 0);
     }
 }

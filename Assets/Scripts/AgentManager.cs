@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TMPro;
 using Unity.VisualScripting;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -27,6 +28,7 @@ public class AgentManager : MonoBehaviour
     [Header("Selection Settings")]
     public int SelectionSize = 10;
     public int TournamentSize = 5;
+    public int ElitismSize = 5;
 
     [Header("Mutation Settings")]
     public float MutationRate = 0.01f;
@@ -40,12 +42,22 @@ public class AgentManager : MonoBehaviour
     public float ExplorationReward = 10.0f;
     public float GoalReward = 100.0f;
 
-    [Header("Exploration Settings")]
+    [System.NonSerialized]
     public float CellSize = 5.0f;
+
+    [Header("UI Settings")]
+    [SerializeField]
+    TextMeshProUGUI _generationText;
+    [SerializeField]
+    TextMeshProUGUI _fitnessText;
+
+    private float _generationMaxTime = 1.0f;
+
+    private Coroutine simulationRoutine;
 
     private List<Agent> Population;
     
-    private Dictionary<Agent, float> FitnessValues;
+    private Dictionary<AgentData, float> FitnessValues;
 
     private GameObject Goal;
 
@@ -56,7 +68,6 @@ public class AgentManager : MonoBehaviour
 
     int nGenSimilarFitness = 0;
 
-    Vector3 offset = Vector3.zero;
 
     Dictionary<int, Dictionary<int, float>> MazeValues;
 
@@ -67,28 +78,64 @@ public class AgentManager : MonoBehaviour
     bool[,] MazeDeadEnds;
     Dictionary<Agent, bool[,]> MazeFlaggedPath;
 
+    private bool isRestartingRoutine = false;
+
     private void Start()
     {
 
         Goal = GameObject.FindGameObjectWithTag("Goal");
         Population = new List<Agent>();
-        FitnessValues = new Dictionary<Agent, float>();
+        FitnessValues = new Dictionary<AgentData, float>();
         MazeValues = new Dictionary<int, Dictionary<int, float>>();
         mazeCells = new Dictionary<Vector2Int, GameObject>();
-
-        Agent.TimeStep = TimeStep;
-        Agent.GenerationTime = GenerationMaxTime;
-        Agent.Goal = Goal;
-        Agent.AverageSpeed = AgentAverageSpeed;
-        Agent.MaxSpeed = AgentMaxSpeed;
-
-        
+        MazeFlaggedPath = new();
 
         mazeGenerator = GameObject.FindObjectOfType<MazeGenerator>();
+
+        _generationMaxTime = GenerationMaxTime;
+    }
+
+    private bool DisplayInfo = false;
+
+    private void Update()
+    {
+
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            if (!isRestartingRoutine)
+                StartCoroutine(RestartRoutine());
+        }
+
+        if (Input.GetKeyDown(KeyCode.I))
+        {
+            DisplayInfo = !DisplayInfo;
+        }
+    }
+
+    private IEnumerator RestartRoutine()
+    {
+        isRestartingRoutine = true;
+        EndSimulation();
+        yield return new WaitForSeconds(0.2f);
+        StartSimulation();
+        isRestartingRoutine = false;
+    }
+
+    private void StartSimulation()
+    {
+        AgentData.TimeStep = TimeStep;
+        AgentData.GenerationTime = GenerationMaxTime;
+        AgentData.AverageSpeed = AgentAverageSpeed;
+        AgentData.MaxSpeed = AgentMaxSpeed;
+
+        Agent.Goal = Goal;
+
         var maze = mazeGenerator.GenerateMaze();
-        
+
         var startCell = maze[0, 0];
-        var endCell = mazeGenerator.LastMazeCell;
+        var endCell = mazeGenerator.LongestDeadEnd;
+
+        CellSize = mazeGenerator._cellSize;
 
         this.transform.position = new Vector3(startCell.transform.position.x, 1.2f, startCell.transform.position.z);
         Goal.transform.position = new Vector3(endCell.transform.position.x, 1.2f, endCell.transform.position.z);
@@ -96,8 +143,11 @@ public class AgentManager : MonoBehaviour
         MazeDeadEnds = new bool[maze.GetLength(0), maze.GetLength(1)];
         MazeFlaggedPath = new Dictionary<Agent, bool[,]>();
 
-        StartCoroutine(GenerationsRoutine());
+
+        simulationRoutine = StartCoroutine(GenerationsRoutine());
     }
+
+   
 
     public static float ManhattanDistance(Vector2 a, Vector2 b)
     {
@@ -112,10 +162,9 @@ public class AgentManager : MonoBehaviour
 
         SetValueIfNotExists(cellPos.x, cellPos.y, 0f);
 
-
         var mazeCell = mazeGenerator.GetCellFromVector3(agentPosition);
 
-        MazeValues[cellPos.x][cellPos.y] = Mathf.Min((MazeValues[cellPos.x][cellPos.y] + 1f), 1000000);
+        MazeValues[cellPos.x][cellPos.y] = Mathf.Min((MazeValues[cellPos.x][cellPos.y] + Population.Count * 0.0025f), 1000000);
 
         int nDeadEnds = 0;
 
@@ -124,10 +173,10 @@ public class AgentManager : MonoBehaviour
             int vxCell = cellPos.x + vCell.x;
             int vyCell = cellPos.y + vCell.y;
 
-            SetValueIfNotExists(vxCell, vyCell, 0f);
+            SetValueIfNotExists(vxCell, vyCell, 0.5f);
 
             var nCell = mazeGenerator.GetCell(new Vector2Int(vxCell, vyCell));
-            MazeValues[vxCell][vyCell] = Mathf.Clamp(MazeValues[vxCell][vyCell] + 0.5f, 0f, 1000000);
+            MazeValues[vxCell][vyCell] = Mathf.Clamp(MazeValues[vxCell][vyCell] + Population.Count * 0.00125f, 0f, 1000000);
 
             if (nCell.VisibleCells.Count > 1)
             {
@@ -136,10 +185,10 @@ public class AgentManager : MonoBehaviour
                     nDeadEnds += 1;
                 }
             }
-            else if (nCell != mazeGenerator.LastMazeCell && nCell != mazeGenerator.GetCell(new Vector2Int(0,0)))
+            else if (nCell != mazeGenerator.LongestDeadEnd && nCell != mazeGenerator.GetCell(new Vector2Int(0,0)))
             {
                 MazeDeadEnds[vxCell, vyCell] = true;
-                MazeValues[vxCell][vyCell] = 1000000f;
+                MazeValues[vxCell][vyCell] = 900000f;
                 nDeadEnds += 1;
             }
 
@@ -149,7 +198,7 @@ public class AgentManager : MonoBehaviour
         if (nDeadEnds >= mazeCell.VisibleCells.Count - 1)
         {
             MazeDeadEnds[cellPos.x, cellPos.y] = true;
-            MazeValues[cellPos.x][cellPos.y] = 1000000f;
+            MazeValues[cellPos.x][cellPos.y] = 900000f;
         }
 
         MazeFlaggedPath.Add(agent, new bool[mazeGenerator._mazeWidth, mazeGenerator._mazeHeight]);
@@ -199,6 +248,7 @@ public class AgentManager : MonoBehaviour
         return new Vector2Int(xCell, yCell);
     }
 
+    private bool shouldDisplayInfo = false;
 
     private float computeExplorationReward(Agent agent)
     {
@@ -211,43 +261,85 @@ public class AgentManager : MonoBehaviour
 
         float cellValue = Mathf.Clamp(MazeValues[xCell][yCell], 1, 1000000);
 
-        float totalReward = ExplorationReward / (cellValue);
+        float totalReward = 1f;
 
-        Vector2 agentPos = new Vector2(agent.transform.position.x, agent.transform.position.z);
-
-        float totalDistance = 0.0f;
-
-        foreach (var visCell in mazeCell.VisibleCells)
+        if (!MazeDeadEnds[xCell, yCell])
         {
-            int cxCell = xCell + visCell.x;
-            int cyCell = yCell + visCell.y;
-
-            totalDistance += ManhattanDistance(mazeGenerator.MazeCoordToVector3(new Vector2Int(cxCell, cyCell)), agentPos);
+            totalReward += ExplorationReward / (cellValue);
         }
 
 
+        float travelReward = 1.0f;
+        var distinctPos = agent.PositionsAtTimestep.Distinct().ToList();
+        float nDuplicatePositions = agent.PositionsAtTimestep.GroupBy(_ => _).Where(_ => _.Count() > 1).Sum(_ => _.Count());
+
+        int nValidPos = distinctPos.Count;
+        for (int i = 0; i < MazeDeadEnds.GetLength(0); i++)
+        {
+            for (int j = 0; j < MazeDeadEnds.GetLength(1); j++)
+            {
+                if (MazeDeadEnds[i, j])
+                {
+                    nValidPos -= 1;
+                }
+            }
+        }
+
+        travelReward = 1f + agent.agentData.DeathIndex * (nValidPos / (nDuplicatePositions + 0.2f));
+
+
+        Vector2 agentPos = new Vector2(agent.transform.position.x, agent.transform.position.z);
+
+        float closestCellDistance = CellSize * 2f;
+        int closestCellX = xCell;
+        int closestCellY = yCell;
+        float closestCellValue = 10000f;
+
+        if (DisplayInfo && shouldDisplayInfo)
+        {
+            Debug.Log("Agent at world position: " + agent.transform.position);
+            Debug.Log("Agent at grid position: " + coords);
+        }
+
         foreach (var visCell in mazeCell.VisibleCells)
         {
-
             int cxCell = xCell + visCell.x;
             int cyCell = yCell + visCell.y;
 
             SetValueIfNotExists(cxCell, cyCell, 0.5f);
 
             if (MazeFlaggedPath.ContainsKey(agent))
-                if (MazeFlaggedPath[agent][cxCell, cyCell]) continue;
+                if (MazeFlaggedPath[agent][cxCell, cyCell]) { continue; }
 
-            float ncReward = Mathf.Clamp(MazeValues[cxCell][cyCell], 0.5f, 1000000f);
+            if (MazeDeadEnds[cxCell, cyCell]) { continue; }
 
-            float manDistance = ManhattanDistance(mazeGenerator.MazeCoordToVector3(new Vector2Int(cxCell, cyCell)), agentPos);
+            Vector3 mazeCellPos = mazeGenerator.MazeCoordToVector3(new Vector2Int(cxCell, cyCell));
+            float currentDistance = Mathf.Abs(ManhattanDistance(new Vector2(mazeCellPos.x, mazeCellPos.z), agentPos));
 
-            float multiplier = 1f - (manDistance / totalDistance) * (manDistance / totalDistance);
+            float ncReward = Mathf.Clamp(MazeValues[closestCellX][closestCellY], 0.5f, 1000000f);
 
-            totalReward +=  (multiplier * multiplier + ExplorationReward) / (ncReward * ncReward);
+            if (ncReward < closestCellValue)
+            {
+                closestCellValue = ncReward;
+                closestCellDistance = currentDistance;
+                closestCellX = cxCell;
+                closestCellY = cyCell;
+            }
+
+        }
+
+        if (DisplayInfo && shouldDisplayInfo)
+        {
+            Debug.Log("Neighbour cell at world position: " + mazeGenerator.MazeCoordToVector3(new Vector2Int(closestCellX, closestCellY)));
+            Debug.Log("Neighbour cell at grid position: " + new Vector2Int(closestCellX, closestCellY));
+            Debug.Log("Distance to neighbour cell: " + closestCellDistance);
         }
 
 
-        return totalReward;
+
+        totalReward *= (ExplorationReward) / (closestCellValue);
+
+        return (totalReward * travelReward) + (1f / closestCellDistance); /** travelReward + 1f;*/
     }
 
     private void SetValueIfNotExists(int xCell, int yCell, float value)
@@ -263,6 +355,21 @@ public class AgentManager : MonoBehaviour
         }
     }
 
+    private bool HasValue(int xCell, int yCell)
+    {
+        if (!MazeValues.ContainsKey(xCell))
+        {
+            return false;
+        }
+
+        if (!MazeValues[xCell].ContainsKey(yCell))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     public float ComputeFitness(Agent agent)
     {
 
@@ -272,9 +379,10 @@ public class AgentManager : MonoBehaviour
         float manDistance = ManhattanDistance(new Vector2(agent.transform.position.x, agent.transform.position.z), new Vector2(Goal.transform.position.x, Goal.transform.position.z));
         float distanceReward = DistanceReward / (manDistance * manDistance);
 
-        float explorationReward = 0.0f;
 
-        explorationReward += computeExplorationReward(agent);
+        float explorationReward = 1f; 
+
+        explorationReward *= computeExplorationReward(agent);
 
 
         fitness += explorationReward;
@@ -292,23 +400,18 @@ public class AgentManager : MonoBehaviour
             return fitness;
         }
 
-        //if (agent.isDead)
-        //{
-        //    fitness /= 2f;
-        //}
-
 
         return fitness;
     }
 
 
-    public List<Agent> Selection(List<Agent> oldPopulation)
+    public List<AgentData> Selection(List<Agent> oldPopulation)
     {
         float absMinFitness = Mathf.Abs(FitnessValues.Min(x => x.Value));
 
         float totalFitness = FitnessValues.Sum(x=>x.Value + absMinFitness);
 
-        List<Agent> newAgents = new List<Agent>();
+        List<AgentData> newAgentDNA = new List<AgentData>();
 
         for (int selectedAgents = 0; selectedAgents < SelectionSize; selectedAgents++)
         {
@@ -316,12 +419,12 @@ public class AgentManager : MonoBehaviour
             Agent sAgent = tournamentSelection(oldPopulation);
 
             oldPopulation.Remove(sAgent);
-            newAgents.Add(sAgent);
+            newAgentDNA.Add(sAgent.agentData);
         }
 
 
 
-        return newAgents;
+        return newAgentDNA;
     }
 
     private Agent proportionalSelection(List<Agent> oldPopulation, float totalFitness, float absMinFitness = 0.0f)
@@ -331,7 +434,7 @@ public class AgentManager : MonoBehaviour
 
         foreach (var agent in oldPopulation)
         {
-            float fitness = FitnessValues[agent];
+            float fitness = FitnessValues[agent.agentData];
 
             cumulativeFitness += fitness + absMinFitness;
 
@@ -360,7 +463,7 @@ public class AgentManager : MonoBehaviour
         {
             int randomIndex = Random.Range(0, oldPopulation.Count);
             Agent cAgent = oldPopulation[randomIndex];
-            float cFitness = FitnessValues[cAgent];
+            float cFitness = FitnessValues[cAgent.agentData];
 
             if (cFitness > maxFitness)
             {
@@ -372,25 +475,25 @@ public class AgentManager : MonoBehaviour
         return mAgent;
     }
 
-    public List<Agent> Crossover(List<Agent> selectedPop, int newPopSize)
+    public List<AgentData> Crossover(List<AgentData> selectedPop, int newPopSize)
     {
 
 
-        List<List<float>> DNAList = new List<List<float>>();
+        List<AgentData> DNAList = new List<AgentData>();
 
         int maxFails = 100;
 
-        while (DNAList.Count < newPopSize-1 && maxFails > 0)
+        while (DNAList.Count < newPopSize - ElitismSize && maxFails > 0)
         {
             int parent1Index = Random.Range(0, selectedPop.Count);
             int parent2Index = Random.Range(0, selectedPop.Count);
 
-            Agent parent1 = selectedPop[parent1Index];
-            Agent parent2 = selectedPop[parent2Index];
+            AgentData parent1 = selectedPop[parent1Index];
+            AgentData parent2 = selectedPop[parent2Index];
 
             //List<float> childrenDNA = unitCrossover(parent1, parent2);
             //List<float> childrenDNA = averageCrossover(parent1, parent2);
-            List<float> childrenDNA = singlePointCrossover(parent1, parent2);
+            AgentData childrenDNA = singlePointCrossover(parent1, parent2);
             //List<float> childrenDNA = doublePointCrossover(parent1, parent2);
 
             if (childrenDNA == null)
@@ -402,140 +505,138 @@ public class AgentManager : MonoBehaviour
             DNAList.Add(childrenDNA);
         }
 
-        List<Agent> newPopulation = new List<Agent>();
-
-        for (int i = 0; i < DNAList.Count; i++)
-        {
-            var agent = InstantiateAgent(DNAList[i]);
-            newPopulation.Add(agent);
-        }
-
-        return newPopulation;
+        return DNAList;
     }
 
-    private List<float> doublePointCrossover(Agent parent1, Agent parent2)
+    //private List<float> doublePointCrossover(Agent parent1, Agent parent2)
+    //{
+    //    if (parent1 == parent2)
+    //        return parent1.DNA;
+
+    //    int minDNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+
+    //    int crossoverPoint1 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
+    //    int crossoverPoint2 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
+
+    //    if (crossoverPoint1 > crossoverPoint2)
+    //    {
+    //        int temp = crossoverPoint1;
+    //        crossoverPoint1 = crossoverPoint2;
+    //        crossoverPoint2 = temp;
+    //    }
+
+    //    List<float> child1DNA = new List<float>(parent1.DNA.GetRange(0, crossoverPoint1));
+    //    child1DNA.AddRange(parent2.DNA.GetRange(crossoverPoint1, crossoverPoint2 - crossoverPoint1));
+    //    child1DNA.AddRange(parent1.DNA.GetRange(crossoverPoint2, parent1.DNA.Count - crossoverPoint2));
+
+    //    return child1DNA;
+    //}
+
+    private AgentData singlePointCrossover(AgentData parent1, AgentData parent2)
     {
         if (parent1 == parent2)
-            return parent1.DNA;
+            return parent1;
 
-        int minDNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
 
-        int crossoverPoint1 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
-        int crossoverPoint2 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
 
-        if (crossoverPoint1 > crossoverPoint2)
-        {
-            int temp = crossoverPoint1;
-            crossoverPoint1 = crossoverPoint2;
-            crossoverPoint2 = temp;
-        }
 
-        List<float> child1DNA = new List<float>(parent1.DNA.GetRange(0, crossoverPoint1));
-        child1DNA.AddRange(parent2.DNA.GetRange(crossoverPoint1, crossoverPoint2 - crossoverPoint1));
-        child1DNA.AddRange(parent1.DNA.GetRange(crossoverPoint2, parent1.DNA.Count - crossoverPoint2));
+        AgentData minParent = FitnessValues[parent1] < FitnessValues[parent2] ? parent1: parent2;
+        AgentData maxParent = FitnessValues[parent1] > FitnessValues[parent2] ? parent1: parent2;
 
-        return child1DNA;
+
+        int crossoverPoint = Random.Range(1, Mathf.Min(minParent.DNA.Count, maxParent.DNA.Count) - 1);
+
+        List<float> child1DNA = new List<float>(minParent.DNA.GetRange(0, crossoverPoint));
+        child1DNA.AddRange(maxParent.DNA.GetRange(crossoverPoint, maxParent.DNA.Count - crossoverPoint));
+        int deathIndex = maxParent.DeathIndex;
+
+        return new AgentData(child1DNA, deathIndex);
     }
 
-    private List<float>singlePointCrossover(Agent parent1, Agent parent2)
+    //private List<float> averageCrossover(Agent parent1, Agent parent2)
+    //{
+    //    if (parent1 == parent2)
+    //        return parent1.DNA;
+
+    //    int DNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+
+    //    List<float> child1DNA = new List<float>();
+
+    //    float parent1Fitness = FitnessValues[parent1];
+    //    float parent2Fitness = FitnessValues[parent2];
+    //    float totalFitness = parent1Fitness + parent2Fitness;
+
+    //    for (int i = 0; i < DNACount; i++)
+    //    {
+    //        float weightedAngle = parent1.DNA[i] * (parent1Fitness / totalFitness) + parent2.DNA[i] * (parent2Fitness / totalFitness);
+    //        child1DNA.Add(weightedAngle);
+    //    }
+
+    //    var maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
+
+    //    child1DNA.AddRange(maxDna.GetRange(DNACount, maxDna.Count - DNACount));
+
+    //    return child1DNA;
+    //}
+
+    //private List<float> unitCrossover(Agent parent1, Agent parent2)
+    //{
+    //    if (parent1 == parent2)
+    //        return parent1.DNA;
+
+    //    List<float> childDNA = new List<float>();
+
+    //    int minDNA = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+
+    //    List<float> maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
+
+    //    for (int i = 0; i < minDNA; i++)
+    //    {
+    //        int pDNA = Random.Range(0, 2);
+
+    //        if (pDNA == 0)
+    //            childDNA.Add(parent1.DNA[i]);
+    //        else
+    //            childDNA.Add(parent2.DNA[i]);
+    //    }
+
+    //    childDNA.AddRange(maxDna.GetRange(minDNA, maxDna.Count - minDNA));
+
+    //    return childDNA;
+    //}
+
+    public List<AgentData> Mutation(List<AgentData> population, float mutationRate)
     {
-        if (parent1 == parent2)
-            return parent1.DNA;
+        List<AgentData> maxAgents = FitnessValues.OrderByDescending(x => x.Value).Select(x => x.Key).Take(ElitismSize).ToList();
 
-        int minDNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+        population.AddRange(maxAgents);
 
-        int crossoverPoint = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
-
-
-        List<float> child1DNA = new List<float>(parent1.DNA.GetRange(0, crossoverPoint));
-        child1DNA.AddRange(parent2.DNA.GetRange(crossoverPoint, parent2.DNA.Count - crossoverPoint));
-
-
-        return child1DNA;
-    }
-
-    private List<float> averageCrossover(Agent parent1, Agent parent2)
-    {
-        if (parent1 == parent2)
-            return parent1.DNA;
-
-        int DNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
-
-        List<float> child1DNA = new List<float>();
-
-        float parent1Fitness = FitnessValues[parent1];
-        float parent2Fitness = FitnessValues[parent2];
-        float totalFitness = parent1Fitness + parent2Fitness;
-
-        for (int i = 0; i < DNACount; i++)
+        foreach (var agentData in population)
         {
-            float weightedAngle = parent1.DNA[i] * (parent1Fitness / totalFitness) + parent2.DNA[i] * (parent2Fitness / totalFitness);
-            child1DNA.Add(weightedAngle);
-        }
 
-        var maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
-
-        child1DNA.AddRange(maxDna.GetRange(DNACount, maxDna.Count - DNACount));
-
-        return child1DNA;
-    }
-
-    private List<float> unitCrossover(Agent parent1, Agent parent2)
-    {
-        if (parent1 == parent2)
-            return parent1.DNA;
-
-        List<float> childDNA = new List<float>();
-
-        int minDNA = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
-
-        List<float> maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
-
-        for (int i = 0; i < minDNA; i++)
-        {
-            int pDNA = Random.Range(0, 2);
-
-            if (pDNA == 0)
-                childDNA.Add(parent1.DNA[i]);
-            else
-                childDNA.Add(parent2.DNA[i]);
-        }
-
-        childDNA.AddRange(maxDna.GetRange(minDNA, maxDna.Count - minDNA));
-
-        return childDNA;
-    }
-
-    public List<Agent> Mutation(List<Agent> population, float mutationRate)
-    {
-        Agent maxAgent = FitnessValues.Aggregate((l, r) => l.Value > r.Value ? l : r).Key;
-        List<float> maxDNA = new List<float>(maxAgent.DNA); 
-
-        foreach (var agent in population)
-        {
-            for (int d = 1; d < agent.DNA.Count; d++)
+            float randomValue = Random.Range(0.0f, 1.0f);
+            if (randomValue <= mutationRate && agentData.isDead)
             {
-                float randomValue = Random.Range(0.0f, 1.0f);
-                if (agent.isDead && randomValue <= mutationRate)
+                int d = System.Math.Min(agentData.DeathIndex, agentData.DNA.Count) - 2;
+                d = Mathf.Max(d, 1);
+
+                if (DisplayInfo)
                 {
-
-                        float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f);
-                        agent.DNA[d] = newAngle;
-                    
+                    Debug.LogWarning("Death index: " + agentData.DeathIndex);
+                    Debug.LogWarning("DNA count: " + agentData.DNA.Count);
+                    Debug.LogWarning("D value: " + d);
                 }
-                //else if (randomValue <= mutationRate)
-                //{
-                //    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI);
-                //    agent.DNA[d] += newAngle;
-                //}                
-            }
 
-            agent.isDead = false;
+
+                for (int i = d; i < agentData.DNA.Count; i++)
+                {
+                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 2f);
+                    agentData.MutateAtIndex(i, newAngle);
+                }
+            }      
+            
         }
 
-        var mAgent = InstantiateAgent(maxDNA);
-        mAgent.isDead = false;
-        population.Add(mAgent);
 
         return population;
     }
@@ -549,8 +650,6 @@ public class AgentManager : MonoBehaviour
             AgentPooler.Instance.DestroyToPool(a);
         }
 
- 
-
         // Update Exploration Maze
         //foreach (var coords in CoordsToUpdate)
         //{
@@ -558,22 +657,24 @@ public class AgentManager : MonoBehaviour
         //}
 
         List<Agent> oldPopulation = Population;
-        List<Agent> newPopulation = new List<Agent>();
+        List<AgentData> newPopulationDNA = new List<AgentData>();
 
         float totalFitness = 0.0f;
         Agent maxAgent = null;
-        float maxFitness = 0.0f;
+        float maxFitness = Mathf.NegativeInfinity;
+        shouldDisplayInfo = true;
         foreach (Agent agent in oldPopulation)
         {
             float fitness = ComputeFitness(agent);
             totalFitness += fitness;
-            FitnessValues[agent] = fitness;
+            FitnessValues[agent.agentData] = fitness;
 
             if (fitness >= maxFitness)
             {
                 maxFitness = fitness;
                 maxAgent = agent;
             }
+            shouldDisplayInfo = false;
         }
 
 
@@ -586,37 +687,44 @@ public class AgentManager : MonoBehaviour
             nGenSimilarFitness = 0;
         }
        
-
-        Debug.Log("Generation: " + CurrentGen + " Current Population: " + oldPopulation.Count);
-        Debug.Log("Average Fitnes: " + totalFitness / oldPopulation.Count + " Max Fitness: " + maxFitness + " Min Fitness: " + FitnessValues.Min(x => x.Value));
+        _generationText.text = "Generation: " + CurrentGen + "\nPopulation Size: " + oldPopulation.Count;
+        _fitnessText.text = "Average: " + totalFitness / oldPopulation.Count + "\nMax: " + maxFitness;
 
         int newPopSize = oldPopulation.Count + Random.Range(-NewGenerationSizeOffset, NewGenerationSizeOffset + 1);
         newPopSize = Mathf.Clamp(newPopSize, MinPopulationSize, MaxPopulationSize);
 
-        newPopulation = Selection(oldPopulation);
-        newPopulation = Crossover(newPopulation, newPopSize);
-        newPopulation = Mutation(newPopulation, MutationRate + MutationRateIncrement * nGenSimilarFitness);
+        newPopulationDNA = Selection(oldPopulation);
+        newPopulationDNA = Crossover(newPopulationDNA, newPopSize);
+        newPopulationDNA = Mutation(newPopulationDNA, MutationRate + MutationRateIncrement * nGenSimilarFitness);
 
         //SetDeadEnds();
         //SetBackTracking();
         FitnessValues.Clear();
         MazeFlaggedPath.Clear();
+        Population.Clear();
 
-        Population = newPopulation;
+        List<string> strData = new List<string>();
 
-        foreach (var agent in Population)
+        foreach (var agentData in newPopulationDNA)
         {
+            if (FitnessValues.ContainsKey(agentData))
+                agentData.ChangeGUID();
+
+            FitnessValues.Add(agentData, 0.0f);
+
+            Agent agent = InstantiateAgent(agentData);
             agent.transform.position = this.transform.position;
             agent.transform.rotation = Quaternion.identity;
 
-            FitnessValues.Add(agent, 0.0f);
-        }
+            Population.Add(agent);
 
+        }
 
     }
 
     private IEnumerator GenerationsRoutine()
     {
+
         for (int i = 0; i < PopulationStartSize; i++)
         {
             Agent cGent = InstantiateAgent();
@@ -624,14 +732,14 @@ public class AgentManager : MonoBehaviour
             cGent.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
 
             Population.Add(cGent);
-            FitnessValues.Add(cGent, 0.0f);
+            FitnessValues.Add(cGent.agentData, 0.0f);
         }
 
         while (CurrentGen < MaxGenerations)
         {
             float currentGenerationTime = 0.0f;
             CompletedAgents = 0;
-            while (CompletedAgents < Population.Count && currentGenerationTime < GenerationMaxTime)
+            while (CompletedAgents < Population.Count && currentGenerationTime < _generationMaxTime)
             {
                 yield return null;
                 currentGenerationTime += Time.deltaTime;
@@ -639,8 +747,8 @@ public class AgentManager : MonoBehaviour
 
             if (CompletedAgents < Population.Count)
             {
-                GenerationMaxTime += GenerationTimeIncrement;
-                Agent.GenerationTime = GenerationMaxTime;
+                _generationMaxTime += GenerationTimeIncrement;
+                AgentData.GenerationTime = _generationMaxTime;
             }
 
 
@@ -656,14 +764,49 @@ public class AgentManager : MonoBehaviour
 
     }
 
-    private Agent InstantiateAgent(List<float> DNA = null)
+    private void EndSimulation()
+    {
+        if (simulationRoutine != null)
+            StopCoroutine(simulationRoutine);
+
+        foreach (var agent in Population)
+        {
+            agent.isResetting = true;
+            AgentPooler.Instance.DestroyToPool(agent);
+        }
+
+        foreach (var primitive in mazeCells.Values)
+        {
+            Destroy(primitive);
+        }
+
+        Population.Clear();
+        FitnessValues.Clear();
+        MazeValues.Clear();
+        mazeCells.Clear();
+        MazeFlaggedPath.Clear();
+
+        mazeGenerator.DestroyMaze();
+
+        CurrentGen = 0;
+        CompletedAgents = 0;
+        _generationMaxTime = GenerationMaxTime;
+
+    }
+
+    private Agent InstantiateAgent(AgentData data = null)
     {
         Agent cGent = AgentPooler.Instance.InstantiateFromPool(this.transform, false);
         cGent.Manager = this;
-        if (DNA != null)
-            cGent.DNA = DNA;
 
+        if (data == null)
+            data = new AgentData();
+
+        cGent.agentData = data;
+        cGent.isDead = false;
         cGent.gameObject.SetActive(true);
+        
+        
         return cGent;
     }
 

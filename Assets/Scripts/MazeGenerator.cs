@@ -21,6 +21,10 @@ public class MazeGenerator : MonoBehaviour
 
     public MazeCell LastMazeCell { get; private set; } = null;
 
+    public MazeCell LongestDeadEnd { get; private set; } = null;
+
+    private int longestDeadEndLenght = 0;
+
     public MazeCell[,] GenerateMaze()
     {
         _mazeGrid = new MazeCell[_mazeWidth, _mazeHeight];
@@ -41,7 +45,7 @@ public class MazeGenerator : MonoBehaviour
         return _mazeGrid;
     }
 
-    private void generateMaze(MazeCell previousCell, MazeCell currentCell)
+    private void generateMaze(MazeCell previousCell, MazeCell currentCell, int pLenght = 0)
     {
         currentCell.Visit();
         ClearWalls(previousCell, currentCell);
@@ -54,9 +58,20 @@ public class MazeGenerator : MonoBehaviour
 
             if (nextCell != null)
             {
-                generateMaze(currentCell, nextCell);
+                int nPLenght = pLenght + 1;
+
+                generateMaze(currentCell, nextCell, nPLenght);
                 if (LastMazeCell == null)
                     LastMazeCell = nextCell;
+
+                if (CheckIfNeighbourVisited(currentCell))
+                {
+                    if (longestDeadEndLenght < nPLenght)
+                    {
+                        longestDeadEndLenght = nPLenght;
+                        LongestDeadEnd = nextCell;
+                    }
+                }
             }
         } while (nextCell != null);
 
@@ -135,6 +150,49 @@ public class MazeGenerator : MonoBehaviour
         }
     }
 
+    public bool CheckIfNeighbourVisited(MazeCell currentCell)
+    {
+        int x = Mathf.FloorToInt(currentCell.transform.position.x / _cellSize);
+        int z = Mathf.FloorToInt(currentCell.transform.position.z / _cellSize);
+
+        for (int i = -1; i <= 1; i++) 
+        { 
+            for (int j = -1; j <= 1; j++)
+            {
+                if (i == 0 && j == 0) continue; 
+                    if (!CheckIfVisited(x + i, z + j))
+                        return false;
+            }
+        }
+
+        return true;
+    }
+
+    public bool CheckIfVisited(int x, int z)
+    {
+        if (x + 1 >= _mazeWidth)
+        {
+            return true;
+        }
+
+        if (x - 1 < 0)
+        {
+            return true;
+        }
+
+        if (z + 1 >= _mazeHeight)
+        {
+            return true;
+        }
+
+        if (z - 1 < 0)
+        {
+            return true;
+        }
+
+        return _mazeGrid[x, z].isVisited;
+    }
+
     public Vector2Int Vector3ToMazeCoord(Vector3 coord)
     {
         int x = Mathf.FloorToInt(coord.x / _cellSize);
@@ -159,6 +217,22 @@ public class MazeGenerator : MonoBehaviour
 
     public Vector3 MazeCoordToVector3(Vector2Int cell)
     {
-        return new Vector3(cell.x * _cellSize + _cellSize / 2f, _cellSize / 2f, cell.y * _cellSize + _cellSize / 2f);
+        return new Vector3(cell.x * _cellSize + _cellSize / 2f, 0f, cell.y * _cellSize + _cellSize / 2f);
+    }
+
+    public void DestroyMaze()
+    {
+        if (_mazeGrid == null) return;
+
+        foreach (var cell in _mazeGrid)
+        {
+            Destroy(cell.gameObject);
+        }
+
+        _mazeGrid = new MazeCell[_mazeWidth, _mazeHeight];
+        LastMazeCell = null;
+        LongestDeadEnd = null;
+        longestDeadEndLenght = 0;
+
     }
 }
