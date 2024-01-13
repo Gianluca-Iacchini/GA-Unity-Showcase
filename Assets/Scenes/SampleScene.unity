@@ -1346,7 +1346,7 @@ MonoBehaviour:
   SimilarFitnessThreshold: 2
   DeathPenalty: 0
   DistanceReward: 1000
-  LifeTimeReward: 4
+  LifeTimeReward: 5
   ExplorationReward: 100
   GoalReward: 10000
   _generationText: {fileID: 1089483864}

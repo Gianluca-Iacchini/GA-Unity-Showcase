@@ -8,11 +8,8 @@ using UnityEngine.UIElements;
 
 public class Agent : MonoBehaviour
 {
-    
-    private float DefaultTargetRadius = 10.0f;
+    public static GameObject Goal;
 
-    float fromAngle = 0.0f;
-    float toAngle = 0.0f;
     float t = 0.0f;
 
     [NonSerialized]
@@ -32,9 +29,7 @@ public class Agent : MonoBehaviour
     [NonSerialized]
     public AgentData agentData;
 
-    public float LifeTime { get; private set; }
 
-    public static GameObject Goal;
 
     public List<Vector2Int> PositionsAtTimestep = new List<Vector2Int>();
 
@@ -57,10 +52,6 @@ public class Agent : MonoBehaviour
             this.isDead = false;
         }
 
-        Vector3 newPos = this.transform.position;
-        newPos += this.transform.forward * DefaultTargetRadius;
-        newPos.y = this.transform.position.y;
-
         _lastPosition = Manager != null ? Manager.transform.position : this.transform.position;
         PositionsAtTimestep.Clear();
 
@@ -71,6 +62,9 @@ public class Agent : MonoBehaviour
         StartCoroutine(SetAngles());
     }
 
+    /// <summary>
+    /// When the agent is disabled, check if it can see the goal from both the current position or the last position he was in.
+    /// </summary>
     private void OnDisable()
     {
         StopAllCoroutines();
@@ -96,26 +90,30 @@ public class Agent : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Move the agent and rotate it according to the DNA.
+    /// </summary>
+    /// <returns></returns>
     IEnumerator SetAngles()
     {
         int index = 0;
-        fromAngle = 0.0f;
-        toAngle = 0.0f;
-        LifeTime = 0.0f;
+        float fromAngle = 0.0f;
+        float toAngle;
 
+        // If the agent has no DNA, wait until it has one. This happens when the agent is created and the DNA is not yet set.
         while (this.agentData != null && agentData.DNA.Count == 0)
         {
             yield return null;
         }
 
-        List<float> Angles = agentData.DNA.GetRange(1, agentData.DNA.Count - 1);
+        List<float> Angles = agentData.DNA;
 
+        // Add the first position to the list of positions visited by the agent.
         PositionsAtTimestep.Add(GetCurrentCellPosition());
-
-
 
         while (true)
         {
+            // If the agent DNA is not long enough for the next movement we add a new gene to the DNA.
             if (index >= Angles.Count)
             {
                 float newDeltaAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f);
@@ -124,7 +122,7 @@ public class Agent : MonoBehaviour
             }
             
 
-
+            // Compute the angle the agent should rotate to.
             toAngle = fromAngle + Angles[index];
             this.agentData.DeathIndex = index;
             index++;
@@ -132,24 +130,30 @@ public class Agent : MonoBehaviour
             t = 0.0f;
             float timeSinceLastStep = 0.0f;
 
-
+            // As long as the agent is alive, it rotates and moves forward.
             while (timeSinceLastStep < AgentData.TimeStep)
             {
+                // Periodically check if the agent runs into a wall or reaches the goal.
                 TraceRays();
-                MoveAgent();
+                // Move the agent forward
+                MoveAgent(fromAngle, toAngle);
 
                 timeSinceLastStep += Time.deltaTime;
                 yield return null;
             }
             PositionsAtTimestep.Add(GetCurrentCellPosition());
             _lastPosition = this.transform.position;
-            LifeTime += AgentData.TimeStep;
+
             fromAngle = toAngle;
 
         }
 
     }
 
+    /// <summary>
+    /// Helper function to get the current cell position of the agent.
+    /// </summary>
+    /// <returns></returns>
     private Vector2Int GetCurrentCellPosition()
     {
         Vector3 pos = this.transform.position;
@@ -166,12 +170,17 @@ public class Agent : MonoBehaviour
     }
 
 
-    private void MoveAgent()
+    /// <summary>
+    /// Move the agent forward and rotate it according to the DNA.
+    /// </summary>
+    /// <param name="fromAngle"></param>
+    /// <param name="toAngle"></param>
+    private void MoveAgent(float fromAngle, float toAngle)
     {
-        float radius = DefaultTargetRadius;
+        float radius = AgentData.Speed;
         float speed = GetSpeed();
         
-        Vector3 targetPoint = MoveTargetPoint(radius);
+        Vector3 targetPoint = MoveTargetPoint(radius, fromAngle, toAngle);
         this.transform.LookAt(targetPoint);
 
         if (speed > AgentData.MaxSpeed)
@@ -182,6 +191,9 @@ public class Agent : MonoBehaviour
         this.transform.Translate(Vector3.forward * speed * Time.deltaTime);
     }
 
+    /// <summary>
+    /// Check if the agent runs into a wall or reaches the goal.
+    /// </summary>
     private void TraceRays()
     {
 
@@ -211,20 +223,31 @@ public class Agent : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Move the agent forward based on the agent speed.
+    /// </summary>
+    /// <returns></returns>
     private float GetSpeed()
     {
-        float multiplier = agentData.DNA.Count > 0 ? agentData.DNA[0] : AgentData.AverageSpeed;
+        float multiplier =  AgentData.Speed;
 
-        Vector3 velocity = Vector3.forward * DefaultTargetRadius;
+        Vector3 velocity = Vector3.forward * AgentData.Speed;
         velocity.y = 0;
 
 
         return velocity.normalized.magnitude * multiplier;
     }
 
-
-    private Vector3 MoveTargetPoint(float radius)
+    /// <summary>
+    /// Compute a target point for the agent to look at. The agent will rotate and move towards this point.
+    /// </summary>
+    /// <param name="radius"></param>
+    /// <param name="fromAngle"></param>
+    /// <param name="toAngle"></param>
+    /// <returns></returns>
+    private Vector3 MoveTargetPoint(float radius, float fromAngle, float toAngle)
     {
+        // The movement is linearly interpolated between the previous angle and the next angle.
         float angle = Mathf.Lerp(fromAngle, toAngle, t/AgentData.TimeStep);
         t += Time.deltaTime;
 

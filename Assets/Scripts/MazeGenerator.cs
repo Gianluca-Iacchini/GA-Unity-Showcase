@@ -45,6 +45,12 @@ public class MazeGenerator : MonoBehaviour
         return _mazeGrid;
     }
 
+    /// <summary>
+    /// Generate a maze using a DFS algorithm with backtracking.
+    /// </summary>
+    /// <param name="previousCell"></param>
+    /// <param name="currentCell"></param>
+    /// <param name="pLenght"></param>
     private void generateMaze(MazeCell previousCell, MazeCell currentCell, int pLenght = 0)
     {
         currentCell.Visit();
@@ -66,6 +72,7 @@ public class MazeGenerator : MonoBehaviour
 
                 if (CheckIfNeighbourVisited(currentCell))
                 {
+                    // Keep track of the longest path in the maze
                     if (longestDeadEndLenght < nPLenght)
                     {
                         longestDeadEndLenght = nPLenght;
@@ -77,6 +84,7 @@ public class MazeGenerator : MonoBehaviour
 
     }
 
+    // Clear the walls between neighbouring cells
     private void ClearWalls(MazeCell previousCell, MazeCell currentCell)
     {
         if (previousCell == null) return;

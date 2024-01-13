@@ -2,6 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Class to keep track of the maze cell's data
+/// </summary>
 public class MazeCell : MonoBehaviour
 {
     [SerializeField]

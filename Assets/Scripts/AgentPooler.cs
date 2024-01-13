@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+/// <summary>
+/// Helper class to optimize performance by pooling agents
+/// </summary>
 public class AgentPooler : MonoBehaviour
 {
     public Agent AgentPrefab;

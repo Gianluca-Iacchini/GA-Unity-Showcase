@@ -9,6 +9,12 @@ public class GaussianDistribution
     private static System.Random random = new();
     
 
+    /// <summary>
+    /// Computes a random number from a Gaussian distribution with the given mean and standard deviation.
+    /// </summary>
+    /// <param name="mean">Mean of the distribution</param>
+    /// <param name="standardDeviation">Standard deviation of the distribution</param>
+    /// <returns></returns>
     public static float GenerateRandomGaussian(float mean=0f, float standardDeviation=1f)
     {
         double u1 = 1.0 - random.NextDouble(); // Uniform random variables
@@ -20,6 +26,11 @@ public class GaussianDistribution
         return (float)(mean + z0 * standardDeviation);
     }
 
+    /// <summary>
+    /// Computes a random number from 0 to N (exclusive) with a probability skewed towards choosing the higher numbers.
+    /// </summary>
+    /// <param name="N"></param>
+    /// <returns></returns>
     public static int RandomlySelectElement(int N)
     {
         double[] probabilities = Enumerable.Range(0, N).Select((_, i) => Math.Pow(2, i + 1)).ToArray();
@@ -38,6 +49,6 @@ public class GaussianDistribution
             }
         }
 
-        return System.Math.Max(N - 1, 0);
+        return Math.Max(N - 1, 0);
     }
 }

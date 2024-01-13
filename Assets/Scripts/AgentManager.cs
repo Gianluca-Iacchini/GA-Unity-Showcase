@@ -33,7 +33,7 @@ public class AgentManager : MonoBehaviour
     [HideInInspector]
     public float GenerationTimeIncrement = 0.5f;
 
-    [Header("Selection Settings")]
+    // Selection Settings
     [HideInInspector]
     public SelectionType SelectionMethod = SelectionType.Tournament;
     [HideInInspector]
@@ -43,11 +43,11 @@ public class AgentManager : MonoBehaviour
     [HideInInspector]
     public int ElitismSize = 5;
 
-    [Header("Crossover Settings")]
+    // Crossover Settings
     [HideInInspector]
     public CrossoverType CrossoverMethod = CrossoverType.SinglePoint;
 
-    [Header("Mutation Settings")]
+    // Mutation Settings
     [HideInInspector]
     public float MutationRate = 0.01f;
     [HideInInspector]
@@ -55,7 +55,7 @@ public class AgentManager : MonoBehaviour
     [HideInInspector]
     public float SimilarFitnessThreshold = 3f;
 
-    [Header("Fitness Function Settings")]
+    // Reward Settings
     [HideInInspector]
     public float DeathPenalty = 100.0f;
     [HideInInspector]
@@ -67,14 +67,14 @@ public class AgentManager : MonoBehaviour
     [HideInInspector]
     public float GoalReward = 100.0f;
 
-    [System.NonSerialized]
-    public float CellSize = 5.0f;
-
-    [Header("UI Settings")]
+    // UI
     [HideInInspector]
     public TextMeshProUGUI _generationText;
     [HideInInspector]
     public TextMeshProUGUI _fitnessText;
+
+    [System.NonSerialized]
+    public float CellSize = 5.0f;
 
     public enum SelectionType
     {
@@ -135,8 +135,6 @@ public class AgentManager : MonoBehaviour
 
     }
 
-    private bool DisplayInfo = false;
-
     private void Update()
     {
 
@@ -144,11 +142,6 @@ public class AgentManager : MonoBehaviour
         {
             if (!isRestartingRoutine)
                 StartCoroutine(RestartRoutine());
-        }
-
-        if (Input.GetKeyDown(KeyCode.I))
-        {
-            DisplayInfo = !DisplayInfo;
         }
     }
 
@@ -163,60 +156,76 @@ public class AgentManager : MonoBehaviour
 
     private void StartSimulation()
     {
+        // Reset agent setting
         AgentData.TimeStep = TimeStep;
         AgentData.GenerationTime = GenerationMaxTime;
-        AgentData.AverageSpeed = AgentSpeed;
-
+        AgentData.Speed = AgentSpeed;
         Agent.Goal = Goal;
 
+        // Generate a random maze
         var maze = mazeGenerator.GenerateMaze();
-
         var startCell = maze[0, 0];
         var endCell = mazeGenerator.LongestDeadEnd;
-
         CellSize = mazeGenerator._cellSize;
 
+        // Set the agent's starting and goal positions
         this.transform.position = new Vector3(startCell.transform.position.x, 0.25f, startCell.transform.position.z);
         Goal.transform.position = new Vector3(endCell.transform.position.x, 0.25f, endCell.transform.position.z);
 
+        // Used for finding and storing the maze dead ends and where the agents came from
         MazeDeadEnds = new bool[maze.GetLength(0), maze.GetLength(1)];
         MazeFlaggedPath = new Dictionary<Agent, bool[,]>();
 
-
+        // Start the simulation
         simulationRoutine = StartCoroutine(GenerationsRoutine());
     }
 
    
-
+    /// <summary>
+    /// Compute the Manhattan distance between two points
+    /// </summary>
+    /// <param name="a"></param>
+    /// <param name="b"></param>
+    /// <returns></returns>
     public static float ManhattanDistance(Vector2 a, Vector2 b)
     {
         return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
     }
 
+    /// <summary>
+    /// Fill the maze value table based on the agent current position and the cells that are visible to the agent
+    /// </summary>
+    /// <param name="agent"></param>
     private void FillMaze(Agent agent)
     {
+        // Get the agent's current position in cell coordinates
         Vector3 agentPosition = agent.transform.position;
-
         Vector2Int cellPos = GetCellFromCoord(agentPosition);
 
+        // If the cell wasn't visited before, set its value to 0
         SetValueIfNotExists(cellPos.x, cellPos.y, 0f);
 
+        // Get the maze cell that the agent is currently in
         var mazeCell = mazeGenerator.GetCellFromVector3(agentPosition);
 
+        // Decrease the value of the cell the agent is currently in (higher number means that cell is rewarded less)
         MazeValues[cellPos.x][cellPos.y] = Mathf.Min((MazeValues[cellPos.x][cellPos.y] + Population.Count * 0.0025f), 1000000);
 
         int nDeadEnds = 0;
 
         foreach (var vCell in mazeCell.VisibleCells)
         {
+            // Compute the cell coordinates of neighbouring cells that are visible to the agent
             int vxCell = cellPos.x + vCell.x;
             int vyCell = cellPos.y + vCell.y;
 
+            // If the cell wasn't visited before, set its value to 0.5
             SetValueIfNotExists(vxCell, vyCell, 0.5f);
 
             var nCell = mazeGenerator.GetCell(new Vector2Int(vxCell, vyCell));
             MazeValues[vxCell][vyCell] = Mathf.Clamp(MazeValues[vxCell][vyCell] + Population.Count * 0.00125f, 0f, 1000000);
 
+            // Finds if the agent is in a dead end or near one
             if (nCell.VisibleCells.Count > 1)
             {
                 if (MazeDeadEnds[vxCell, vyCell])
@@ -234,13 +243,16 @@ public class AgentManager : MonoBehaviour
             SetCellColor(vxCell, vyCell);
         }
         
+        // If all the neighbouring cells are dead ends (except the one the agent came from), then the current cell is a dead end
         if (nDeadEnds >= mazeCell.VisibleCells.Count - 1)
         {
             MazeDeadEnds[cellPos.x, cellPos.y] = true;
             MazeValues[cellPos.x][cellPos.y] = 900000f;
         }
 
+        // Flag the path that the agent took
         MazeFlaggedPath.Add(agent, new bool[mazeGenerator._mazeWidth, mazeGenerator._mazeHeight]);
+
 
         foreach (var pos in agent.PositionsAtTimestep)
         {
@@ -251,6 +263,11 @@ public class AgentManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Changes the color of the cell based on its value (i.e. how many time it has been visited by the agents)
+    /// </summary>
+    /// <param name="xCell"></param>
+    /// <param name="yCell"></param>
     private void SetCellColor(int xCell, int yCell)
     {
 
@@ -279,6 +296,11 @@ public class AgentManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Transforms a position in world coordinates to maze cell coordinates
+    /// </summary>
+    /// <param name="position"></param>
+    /// <returns></returns>
     private Vector2Int GetCellFromCoord(Vector3 position)
     {
         int xCell = Mathf.FloorToInt(position.x / CellSize);
@@ -287,27 +309,86 @@ public class AgentManager : MonoBehaviour
         return new Vector2Int(xCell, yCell);
     }
 
-    private bool shouldDisplayInfo = false;
+    /// <summary>
+    /// Utility function to set the value of a cell in the maze value table
+    /// </summary>
+    /// <param name="xCell"></param>
+    /// <param name="yCell"></param>
+    /// <param name="value"></param>
+    private void SetValueIfNotExists(int xCell, int yCell, float value)
+    {
+        if (!MazeValues.ContainsKey(xCell))
+        {
+            MazeValues[xCell] = new Dictionary<int, float>();
+        }
 
+        if (!MazeValues[xCell].ContainsKey(yCell))
+        {
+            MazeValues[xCell][yCell] = value;
+        }
+    }
+
+    /// <summary>
+    /// Compute the fitness of an agent
+    /// </summary>
+    /// <param name="agent"></param>
+    /// <returns></returns>
+    public float ComputeFitness(Agent agent)
+    {
+
+        float fitness = 0.0f;
+        float explorationReward = 1f;
+
+        float manDistance = ManhattanDistance(new Vector2(agent.transform.position.x, agent.transform.position.z), new Vector2(Goal.transform.position.x, Goal.transform.position.z));
+        explorationReward *= computeExplorationReward(agent);
+
+        fitness += explorationReward - DeathPenalty;
+        
+
+        if (agent.hasReachedGoal)
+        {
+            fitness = GoalReward * (1000f / (manDistance));
+            return fitness;
+        }
+
+        if (agent.CanSeeGoal)
+        {
+            fitness = (GoalReward / 2f) * (1000f / (manDistance));
+            return fitness;
+        }
+
+
+        return fitness;
+    }
+
+
+    /// <summary>
+    /// Compute the exploration reward for the agent.
+    /// </summary>
+    /// <param name="agent"></param>
+    /// <returns></returns>
     private float computeExplorationReward(Agent agent)
     {
+        // Get the agent's current position in cell coordinates
         Vector2Int coords = GetCellFromCoord(agent.transform.position);
-
         int xCell = coords.x;
         int yCell = coords.y;
 
+        // Get the maze cell that the agent is currently in
         var mazeCell = mazeGenerator.GetCellFromVector3(agent.transform.position);
-
         float cellValue = Mathf.Clamp(MazeValues[xCell][yCell], 1, 1000000);
 
+        // Set to 1f to avoid multiplying many small numbers
         float totalReward = 1f;
 
+        // If the agent is not in a dead end, it gets a reward based on the current cell value
         if (!MazeDeadEnds[xCell, yCell])
         {
             totalReward += ExplorationReward / (cellValue);
         }
 
 
+        // The agent gets a reward based on how many distinct cells it has visited that are not dead ends
         float travelReward = 1.0f;
         var distinctPos = agent.PositionsAtTimestep.Distinct().ToList();
         float nDuplicatePositions = agent.PositionsAtTimestep.GroupBy(_ => _).Where(_ => _.Count() > 1).Sum(_ => _.Count());
@@ -324,7 +405,8 @@ public class AgentManager : MonoBehaviour
             }
         }
 
-        travelReward = 1f + agent.agentData.DeathIndex * (nValidPos / (nDuplicatePositions + 0.2f));
+        // The agent gets a penalty if it visited the same cell more than once
+        travelReward = DistanceReward + agent.agentData.DeathIndex * (nValidPos / (nDuplicatePositions + 0.2f));
 
 
         Vector2 agentPos = new Vector2(agent.transform.position.x, agent.transform.position.z);
@@ -334,12 +416,9 @@ public class AgentManager : MonoBehaviour
         int closestCellY = yCell;
         float closestCellValue = 10000f;
 
-        if (DisplayInfo && shouldDisplayInfo)
-        {
-            Debug.Log("Agent at world position: " + agent.transform.position);
-            Debug.Log("Agent at grid position: " + coords);
-        }
 
+        // Look at all the neighbouring cells that are visible to the agent and find the one with the lowest value (which menas it has the highest reward)
+        // The agent gets a reward based on how close it is to the cell with the lowest value
         foreach (var visCell in mazeCell.VisibleCells)
         {
             int cxCell = xCell + visCell.x;
@@ -347,9 +426,11 @@ public class AgentManager : MonoBehaviour
 
             SetValueIfNotExists(cxCell, cyCell, 0.5f);
 
+            // Cells that are part of the path that the agent took are ignored
             if (MazeFlaggedPath.ContainsKey(agent))
                 if (MazeFlaggedPath[agent][cxCell, cyCell]) { continue; }
 
+            // Cells that are dead ends are also ignored
             if (MazeDeadEnds[cxCell, cyCell]) { continue; }
 
             Vector3 mazeCellPos = mazeGenerator.MazeCoordToVector3(new Vector2Int(cxCell, cyCell));
@@ -367,83 +448,16 @@ public class AgentManager : MonoBehaviour
 
         }
 
-        if (DisplayInfo && shouldDisplayInfo)
-        {
-            Debug.Log("Neighbour cell at world position: " + mazeGenerator.MazeCoordToVector3(new Vector2Int(closestCellX, closestCellY)));
-            Debug.Log("Neighbour cell at grid position: " + new Vector2Int(closestCellX, closestCellY));
-            Debug.Log("Distance to neighbour cell: " + closestCellDistance);
-        }
-
-
-
         totalReward *= (ExplorationReward) / (closestCellValue);
 
         return (totalReward * travelReward) + (1f / closestCellDistance); /** travelReward + 1f;*/
     }
 
-    private void SetValueIfNotExists(int xCell, int yCell, float value)
-    {
-        if (!MazeValues.ContainsKey(xCell))
-        {
-            MazeValues[xCell] = new Dictionary<int, float>();
-        }
-
-        if (!MazeValues[xCell].ContainsKey(yCell))
-        {
-            MazeValues[xCell][yCell] = value;
-        }
-    }
-
-    private bool HasValue(int xCell, int yCell)
-    {
-        if (!MazeValues.ContainsKey(xCell))
-        {
-            return false;
-        }
-
-        if (!MazeValues[xCell].ContainsKey(yCell))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    public float ComputeFitness(Agent agent)
-    {
-
-        float fitness = 0.0f;
-
-        //float distance = Mathf.Abs(Vector3.Distance(agent.transform.position, Goal.transform.position));
-        float manDistance = ManhattanDistance(new Vector2(agent.transform.position.x, agent.transform.position.z), new Vector2(Goal.transform.position.x, Goal.transform.position.z));
-        float distanceReward = DistanceReward / (manDistance * manDistance);
-
-
-        float explorationReward = 1f; 
-
-        explorationReward *= computeExplorationReward(agent);
-
-
-        fitness += explorationReward;
-        
-
-        if (agent.hasReachedGoal)
-        {
-            fitness = GoalReward + 1000f * distanceReward;
-            return fitness;
-        }
-
-        if (agent.CanSeeGoal)
-        {
-            fitness = (GoalReward/2f) + 1000 * distanceReward;
-            return fitness;
-        }
-
-
-        return fitness;
-    }
-
-
+    /// <summary>
+    /// Select the agents that will act as parents of the next generation based on the algorithm chosen.
+    /// </summary>
+    /// <param name="oldPopulation"></param>
+    /// <returns></returns>
     public List<AgentData> Selection(List<Agent> oldPopulation)
     {
         float absMinFitness = Mathf.Abs(FitnessValues.Min(x => x.Value));
@@ -454,8 +468,19 @@ public class AgentManager : MonoBehaviour
 
         for (int selectedAgents = 0; selectedAgents < SelectionSize; selectedAgents++)
         {
-            //Agent sAgent = proportionalSelection(oldPopulation, totalFitness, absMinFitness);
-            Agent sAgent = tournamentSelection(oldPopulation);
+            Agent sAgent;
+            switch (SelectionMethod)
+            {
+                case SelectionType.Proportional:
+                    sAgent = proportionalSelection(oldPopulation, totalFitness, absMinFitness);
+                    break;
+                case SelectionType.Tournament:
+                    sAgent = tournamentSelection(oldPopulation);
+                    break;
+                default:
+                    sAgent = tournamentSelection(oldPopulation);
+                    break;
+            }
 
             oldPopulation.Remove(sAgent);
             newAgentDNA.Add(sAgent.agentData);
@@ -466,6 +491,13 @@ public class AgentManager : MonoBehaviour
         return newAgentDNA;
     }
 
+    /// <summary>
+    /// With proportional selection, agents with higher fitness are more likely to be chosen.
+    /// </summary>
+    /// <param name="oldPopulation"></param>
+    /// <param name="totalFitness"></param>
+    /// <param name="absMinFitness"></param>
+    /// <returns></returns>
     private Agent proportionalSelection(List<Agent> oldPopulation, float totalFitness, float absMinFitness = 0.0f)
     {
         float cumulativeFitness = 0.0f;
@@ -486,6 +518,11 @@ public class AgentManager : MonoBehaviour
         return oldPopulation.First();
     }
 
+    /// <summary>
+    /// In a tournament selection the agents are divided into groups of size TournamentSize and the agent with the highest fitness in each group is chosen.
+    /// </summary>
+    /// <param name="oldPopulation"></param>
+    /// <returns></returns>
     private Agent tournamentSelection(List<Agent> oldPopulation)
     {
 
@@ -514,6 +551,12 @@ public class AgentManager : MonoBehaviour
         return mAgent;
     }
 
+    /// <summary>
+    /// The agents of the new generations are created by combining the DNA of the selected agents.
+    /// </summary>
+    /// <param name="selectedPop"></param>
+    /// <param name="newPopSize"></param>
+    /// <returns></returns>
     public List<AgentData> Crossover(List<AgentData> selectedPop, int newPopSize)
     {
 
@@ -530,10 +573,26 @@ public class AgentManager : MonoBehaviour
             AgentData parent1 = selectedPop[parent1Index];
             AgentData parent2 = selectedPop[parent2Index];
 
-            //List<float> childrenDNA = unitCrossover(parent1, parent2);
-            //List<float> childrenDNA = averageCrossover(parent1, parent2);
-            AgentData childrenDNA = singlePointCrossover(parent1, parent2);
-            //List<float> childrenDNA = doublePointCrossover(parent1, parent2);
+            AgentData childrenDNA;
+
+            switch (CrossoverMethod)
+            {
+                case CrossoverType.Unit:
+                    childrenDNA = unitCrossover(parent1, parent2);
+                    break;
+                case CrossoverType.Average:
+                    childrenDNA = averageCrossover(parent1, parent2);
+                    break;
+                case CrossoverType.SinglePoint:
+                    childrenDNA = singlePointCrossover(parent1, parent2);
+                    break;
+                case CrossoverType.DoublePoint:
+                    childrenDNA = doublePointCrossover(parent1, parent2);
+                    break;
+                default:
+                    childrenDNA = singlePointCrossover(parent1, parent2);
+                    break;
+            }
 
             if (childrenDNA == null)
             {
@@ -547,6 +606,12 @@ public class AgentManager : MonoBehaviour
         return DNAList;
     }
 
+    /// <summary>
+    /// Divide the parents DNA in three parts and combine them to create the child's DNA.
+    /// </summary>
+    /// <param name="parent1"></param>
+    /// <param name="parent2"></param>
+    /// <returns></returns>
     private AgentData doublePointCrossover(AgentData parent1, AgentData parent2)
     {
         if (parent1 == parent2)
@@ -572,6 +637,12 @@ public class AgentManager : MonoBehaviour
         return new AgentData(child1DNA, maxParent.DeathIndex);
     }
 
+    /// <summary>
+    /// Divide the parents DNA in two parts and combine them to create the child's DNA.
+    /// </summary>
+    /// <param name="parent1"></param>
+    /// <param name="parent2"></param>
+    /// <returns></returns>
     private AgentData singlePointCrossover(AgentData parent1, AgentData parent2)
     {
         if (parent1 == parent2)
@@ -593,6 +664,12 @@ public class AgentManager : MonoBehaviour
         return new AgentData(child1DNA, deathIndex);
     }
 
+    /// <summary>
+    /// The child DNA is a weighted average of the parents DNA.
+    /// </summary>
+    /// <param name="parent1"></param>
+    /// <param name="parent2"></param>
+    /// <returns></returns>
     private AgentData averageCrossover(AgentData parent1, AgentData parent2)
     {
         if (parent1 == parent2)
@@ -625,6 +702,12 @@ public class AgentManager : MonoBehaviour
         return new AgentData(child1DNA, bestParent.DeathIndex);
     }
 
+    /// <summary>
+    /// The child DNA is a random combination of the parents DNA.
+    /// </summary>
+    /// <param name="parent1"></param>
+    /// <param name="parent2"></param>
+    /// <returns></returns>
     private AgentData unitCrossover(AgentData parent1, AgentData parent2)
     {
         if (parent1 == parent2)
@@ -656,6 +739,12 @@ public class AgentManager : MonoBehaviour
         return new AgentData(childDNA, bestParent.DeathIndex);
     }
 
+    /// <summary>
+    /// Mutate the agents DNA based on the mutation rate.
+    /// </summary>
+    /// <param name="population"></param>
+    /// <param name="mutationRate"></param>
+    /// <returns></returns>
     public List<AgentData> Mutation(List<AgentData> population, float mutationRate)
     {
         List<AgentData> maxAgents = FitnessValues.OrderByDescending(x => x.Value).Select(x => x.Key).Take(ElitismSize).ToList();
@@ -666,17 +755,12 @@ public class AgentManager : MonoBehaviour
         {
 
             float randomValue = Random.Range(0.0f, 1.0f);
+
+            // If the child should mutate then always mutate the end where the parent died
             if (randomValue <= mutationRate && agentData.isDead)
             {
                 int d = System.Math.Min(agentData.DeathIndex, agentData.DNA.Count) - 2;
-                d = Mathf.Max(d, 1);
-
-                if (DisplayInfo)
-                {
-                    Debug.LogWarning("Death index: " + agentData.DeathIndex);
-                    Debug.LogWarning("DNA count: " + agentData.DNA.Count);
-                    Debug.LogWarning("D value: " + d);
-                }
+                d = Mathf.Max(d, 0);
 
 
                 for (int i = d; i < agentData.DNA.Count; i++)
@@ -684,28 +768,29 @@ public class AgentManager : MonoBehaviour
                     float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 2f);
                     agentData.MutateAtIndex(i, newAngle);
                 }
+
+                // Mutate the rest of the DNA with a higher chance of chosing later genes.
+                d = GaussianDistribution.RandomlySelectElement(Mathf.Max(d, 0));
+                agentData.MutateAtIndex(d, GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 2f));
             }      
             
         }
 
-
         return population;
     }
 
+    /// <summary>
+    /// Computes the new generation of agents.
+    /// </summary>
     private void ComputeNewGeneration()
     {
-        //Disable all agents
+        
+        // Fill the maze value table and disable all the agents.
         foreach (var a in Population)
         {
             FillMaze(a);
             AgentPooler.Instance.DestroyToPool(a);
         }
-
-        // Update Exploration Maze
-        //foreach (var coords in CoordsToUpdate)
-        //{
-        //    FillMaze(coords.Key, coords.Value);
-        //}
 
         List<Agent> oldPopulation = Population;
         List<AgentData> newPopulationDNA = new List<AgentData>();
@@ -713,7 +798,8 @@ public class AgentManager : MonoBehaviour
         float totalFitness = 0.0f;
         Agent maxAgent = null;
         float maxFitness = Mathf.NegativeInfinity;
-        shouldDisplayInfo = true;
+
+        // Compute the fitness of each agent; also find the highest fitness and the average fitness of the population.
         foreach (Agent agent in oldPopulation)
         {
             float fitness = ComputeFitness(agent);
@@ -725,10 +811,9 @@ public class AgentManager : MonoBehaviour
                 maxFitness = fitness;
                 maxAgent = agent;
             }
-            shouldDisplayInfo = false;
         }
 
-
+        // Keeps track of how many generations in a row have had similar fitness
         if (maxFitness < SimilarFitnessThreshold)
         {
             nGenSimilarFitness = nGenSimilarFitness + 1;
@@ -737,25 +822,27 @@ public class AgentManager : MonoBehaviour
         {
             nGenSimilarFitness = 0;
         }
-       
+        
+        // Update the UI
         _generationText.text = "Generation: " + CurrentGen + "\nPopulation Size: " + oldPopulation.Count;
         _fitnessText.text = "Average: " + totalFitness / oldPopulation.Count + "\nMax: " + maxFitness;
 
+        // Set the new population size
         int newPopSize = oldPopulation.Count + Random.Range(-NewGenerationSizeOffset, NewGenerationSizeOffset + 1);
         newPopSize = Mathf.Clamp(newPopSize, MinPopulationSize, MaxPopulationSize);
 
+        // Generate the new population DNA
         newPopulationDNA = Selection(oldPopulation);
         newPopulationDNA = Crossover(newPopulationDNA, newPopSize);
-        newPopulationDNA = Mutation(newPopulationDNA, MutationRate + MutationRateIncrement * nGenSimilarFitness);
+        newPopulationDNA = Mutation(newPopulationDNA, MutationRate + MutationRateIncrement * nGenSimilarFitness); //Mutation rate is increased by how often the fitness is similar
 
-        //SetDeadEnds();
-        //SetBackTracking();
+        // Clear all the data from the previous generation
         FitnessValues.Clear();
         MazeFlaggedPath.Clear();
         Population.Clear();
 
-        List<string> strData = new List<string>();
 
+        // Instantiate the new agents
         foreach (var agentData in newPopulationDNA)
         {
             if (FitnessValues.ContainsKey(agentData))
@@ -773,9 +860,13 @@ public class AgentManager : MonoBehaviour
 
     }
 
+    /// <summary>
+    /// "Main" function of the algorithm. It creates all the new generations and keeps track of the time.
+    /// </summary>
+    /// <returns></returns>
     private IEnumerator GenerationsRoutine()
     {
-
+        // Instantiate the starting population
         for (int i = 0; i < PopulationStartSize; i++)
         {
             Agent cGent = InstantiateAgent();
@@ -790,12 +881,14 @@ public class AgentManager : MonoBehaviour
         {
             float currentGenerationTime = 0.0f;
             CompletedAgents = 0;
+            // If all the agents have died then we can compute the new generation immediately
             while (CompletedAgents < Population.Count && currentGenerationTime < _generationMaxTime)
             {
                 yield return null;
                 currentGenerationTime += Time.deltaTime;
             }
 
+            // If not all the agents have died then we increase the simulation time of the next generation
             if (CompletedAgents < Population.Count)
             {
                 _generationMaxTime += GenerationTimeIncrement;
@@ -815,6 +908,9 @@ public class AgentManager : MonoBehaviour
 
     }
 
+    /// <summary>
+    /// End the simulation and reset all the data.
+    /// </summary>
     private void EndSimulation()
     {
         if (simulationRoutine != null)
@@ -845,6 +941,11 @@ public class AgentManager : MonoBehaviour
 
     }
 
+    /// <summary>
+    /// Helper function to instatiate the agents
+    /// </summary>
+    /// <param name="data"></param>
+    /// <returns></returns>
     private Agent InstantiateAgent(AgentData data = null)
     {
         Agent cGent = AgentPooler.Instance.InstantiateFromPool(this.transform, false);
@@ -861,6 +962,10 @@ public class AgentManager : MonoBehaviour
         return cGent;
     }
 
+    /// <summary>
+    /// Callback function for when an agent dies
+    /// </summary>
+    /// <param name="agent"></param>
     public void OnAgentCompletion(Agent agent)
     {
         CompletedAgents += 1;

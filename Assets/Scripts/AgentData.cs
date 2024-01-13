@@ -4,12 +4,15 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+/// <summary>
+/// Class to keep track of the agent's DNA
+/// </summary>
 public class AgentData
 {
     [NonSerialized]
     public static float TimeStep = 2f;
     public static float GenerationTime = 5f;
-    public static float AverageSpeed = 5.0f;
+    public static float Speed = 5.0f;
     public static float MaxSpeed = 100.0f;
 
     public string GUID { get; private set; }
@@ -47,8 +50,6 @@ public class AgentData
     {
         System.Random random = new System.Random();
         DNA = Enumerable.Range(0, Mathf.RoundToInt(AgentData.GenerationTime / AgentData.TimeStep)).Select(x => GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f)).ToList();
-        DNA.Insert(0, AgentData.AverageSpeed);
-        DNA[0] = Mathf.Clamp(DNA[0], 1f, AgentData.MaxSpeed);
         this.DeathIndex = DNA.Count;
 
         this.isDead = false;
@@ -67,6 +68,7 @@ public class AgentData
         DNA.Add(newValue);
     }
 
+    // The following functions are used for serialization
     public void ChangeGUID()
     {
         GUID = Guid.NewGuid().ToString();
