@@ -31,10 +31,10 @@ public class AgentData
         }
     }
 
-    public AgentData(List<float> DNA, int deathIndex = 0)
+    public AgentData(List<float> DNA, int deathIndex = 999)
     {
         this.DNA = DNA;
-        this.DeathIndex = deathIndex;
+        this.DeathIndex = Mathf.Min(deathIndex, this.DNA.Count);
         this.isDead = false;
 
         if (GUID == null || GUID == "")
@@ -49,6 +49,7 @@ public class AgentData
         DNA = Enumerable.Range(0, Mathf.RoundToInt(AgentData.GenerationTime / AgentData.TimeStep)).Select(x => GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 3f)).ToList();
         DNA.Insert(0, AgentData.AverageSpeed);
         DNA[0] = Mathf.Clamp(DNA[0], 1f, AgentData.MaxSpeed);
+        this.DeathIndex = DNA.Count;
 
         this.isDead = false;
     }

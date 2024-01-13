@@ -9,47 +9,86 @@ using UnityEngine;
 public class AgentManager : MonoBehaviour
 {
 
-    [Header("Agent Settings")]
-    public float AgentAverageSpeed = 15.0f;
-    public float AgentMaxSpeed = 100.0f;
+    // Agent Settings
+    [HideInInspector]
+    public float AgentSpeed = 15.0f;
 
-    [Header("Population Settings")]
+    // Population settings
+    [HideInInspector]
     public int PopulationStartSize = 10;
+    [HideInInspector]
     public int MinPopulationSize = 10;
+    [HideInInspector]
     public int MaxPopulationSize = 30;
+    [HideInInspector]
     public int NewGenerationSizeOffset = 5;
+    [HideInInspector]
     public int MaxGenerations = 100;
 
-    [Header("Simulation Time Settings")]
+    // Time Settings
+    [HideInInspector]
     public float TimeStep = 0.5f;
+    [HideInInspector]
     public float GenerationMaxTime = 15.0f;
+    [HideInInspector]
     public float GenerationTimeIncrement = 0.5f;
 
     [Header("Selection Settings")]
+    [HideInInspector]
+    public SelectionType SelectionMethod = SelectionType.Tournament;
+    [HideInInspector]
     public int SelectionSize = 10;
+    [HideInInspector]
     public int TournamentSize = 5;
+    [HideInInspector]
     public int ElitismSize = 5;
 
+    [Header("Crossover Settings")]
+    [HideInInspector]
+    public CrossoverType CrossoverMethod = CrossoverType.SinglePoint;
+
     [Header("Mutation Settings")]
+    [HideInInspector]
     public float MutationRate = 0.01f;
+    [HideInInspector]
     public float MutationRateIncrement = 0.02f;
+    [HideInInspector]
     public float SimilarFitnessThreshold = 3f;
 
     [Header("Fitness Function Settings")]
+    [HideInInspector]
     public float DeathPenalty = 100.0f;
+    [HideInInspector]
     public float DistanceReward = 1.0f;
+    [HideInInspector]
     public float LifeTimeReward = 1.0f;
+    [HideInInspector]
     public float ExplorationReward = 10.0f;
+    [HideInInspector]
     public float GoalReward = 100.0f;
 
     [System.NonSerialized]
     public float CellSize = 5.0f;
 
     [Header("UI Settings")]
-    [SerializeField]
-    TextMeshProUGUI _generationText;
-    [SerializeField]
-    TextMeshProUGUI _fitnessText;
+    [HideInInspector]
+    public TextMeshProUGUI _generationText;
+    [HideInInspector]
+    public TextMeshProUGUI _fitnessText;
+
+    public enum SelectionType
+    {
+        Proportional,
+        Tournament
+    }
+
+    public enum CrossoverType
+    {
+        Unit,
+        Average,
+        SinglePoint,
+        DoublePoint
+    }
 
     private float _generationMaxTime = 1.0f;
 
@@ -93,6 +132,7 @@ public class AgentManager : MonoBehaviour
         mazeGenerator = GameObject.FindObjectOfType<MazeGenerator>();
 
         _generationMaxTime = GenerationMaxTime;
+
     }
 
     private bool DisplayInfo = false;
@@ -125,8 +165,7 @@ public class AgentManager : MonoBehaviour
     {
         AgentData.TimeStep = TimeStep;
         AgentData.GenerationTime = GenerationMaxTime;
-        AgentData.AverageSpeed = AgentAverageSpeed;
-        AgentData.MaxSpeed = AgentMaxSpeed;
+        AgentData.AverageSpeed = AgentSpeed;
 
         Agent.Goal = Goal;
 
@@ -137,7 +176,7 @@ public class AgentManager : MonoBehaviour
 
         CellSize = mazeGenerator._cellSize;
 
-        this.transform.position = new Vector3(startCell.transform.position.x, 1.2f, startCell.transform.position.z);
+        this.transform.position = new Vector3(startCell.transform.position.x, 1/2f + mazeGenerator._cellSize / 2f, startCell.transform.position.z);
         Goal.transform.position = new Vector3(endCell.transform.position.x, 1.2f, endCell.transform.position.z);
 
         MazeDeadEnds = new bool[maze.GetLength(0), maze.GetLength(1)];
@@ -222,7 +261,7 @@ public class AgentManager : MonoBehaviour
         if (!mazeCells.ContainsKey(cellKey))
         {
             cubePrimitive = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cubePrimitive.transform.localScale = new Vector3(CellSize, 0.5f, CellSize);
+            cubePrimitive.transform.localScale = new Vector3(CellSize, 0.2f + mazeGenerator._cellSize / 2f, CellSize);
             cubePrimitive.transform.position = new Vector3(xCell * CellSize + CellSize/2f, 1f, yCell * CellSize + CellSize/2f);
             cubePrimitive.AddComponent<MazeCell>();
             mazeCells.Add(cellKey, cubePrimitive);
@@ -508,29 +547,30 @@ public class AgentManager : MonoBehaviour
         return DNAList;
     }
 
-    //private List<float> doublePointCrossover(Agent parent1, Agent parent2)
-    //{
-    //    if (parent1 == parent2)
-    //        return parent1.DNA;
+    private AgentData doublePointCrossover(AgentData parent1, AgentData parent2)
+    {
+        if (parent1 == parent2)
+            return parent1;
 
-    //    int minDNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+        AgentData minParent = FitnessValues[parent1] < FitnessValues[parent2] ? parent1 : parent2;
+        AgentData maxParent = FitnessValues[parent1] > FitnessValues[parent2] ? parent1 : parent2;
 
-    //    int crossoverPoint1 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
-    //    int crossoverPoint2 = Random.Range(1, minDNACount - 1); // Avoid selecting the endpoints
+        int crossoverPoint1 = Random.Range(1, Mathf.Min(minParent.DNA.Count, maxParent.DNA.Count) - 1);
+        int crossoverPoint2 = Random.Range(1, Mathf.Min(minParent.DNA.Count, maxParent.DNA.Count) - 1);
 
-    //    if (crossoverPoint1 > crossoverPoint2)
-    //    {
-    //        int temp = crossoverPoint1;
-    //        crossoverPoint1 = crossoverPoint2;
-    //        crossoverPoint2 = temp;
-    //    }
+        if (crossoverPoint1 > crossoverPoint2)
+        {
+            int temp = crossoverPoint1;
+            crossoverPoint1 = crossoverPoint2;
+            crossoverPoint2 = temp;
+        }
 
-    //    List<float> child1DNA = new List<float>(parent1.DNA.GetRange(0, crossoverPoint1));
-    //    child1DNA.AddRange(parent2.DNA.GetRange(crossoverPoint1, crossoverPoint2 - crossoverPoint1));
-    //    child1DNA.AddRange(parent1.DNA.GetRange(crossoverPoint2, parent1.DNA.Count - crossoverPoint2));
+        List<float> child1DNA = new List<float>(maxParent.DNA.GetRange(0, crossoverPoint1));
+        child1DNA.AddRange(minParent.DNA.GetRange(crossoverPoint1, crossoverPoint2 - crossoverPoint1));
+        child1DNA.AddRange(maxParent.DNA.GetRange(crossoverPoint2, maxParent.DNA.Count - crossoverPoint2));
 
-    //    return child1DNA;
-    //}
+        return new AgentData(child1DNA, maxParent.DeathIndex);
+    }
 
     private AgentData singlePointCrossover(AgentData parent1, AgentData parent2)
     {
@@ -553,57 +593,68 @@ public class AgentManager : MonoBehaviour
         return new AgentData(child1DNA, deathIndex);
     }
 
-    //private List<float> averageCrossover(Agent parent1, Agent parent2)
-    //{
-    //    if (parent1 == parent2)
-    //        return parent1.DNA;
+    private AgentData averageCrossover(AgentData parent1, AgentData parent2)
+    {
+        if (parent1 == parent2)
+            return parent1;
 
-    //    int DNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+        int DNACount = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
 
-    //    List<float> child1DNA = new List<float>();
+        List<float> child1DNA = new List<float>();
 
-    //    float parent1Fitness = FitnessValues[parent1];
-    //    float parent2Fitness = FitnessValues[parent2];
-    //    float totalFitness = parent1Fitness + parent2Fitness;
+        float parent1Fitness = FitnessValues[parent1];
+        float parent2Fitness = FitnessValues[parent2];
+        float totalFitness = parent1Fitness + parent2Fitness;
 
-    //    for (int i = 0; i < DNACount; i++)
-    //    {
-    //        float weightedAngle = parent1.DNA[i] * (parent1Fitness / totalFitness) + parent2.DNA[i] * (parent2Fitness / totalFitness);
-    //        child1DNA.Add(weightedAngle);
-    //    }
+        for (int i = 0; i < DNACount; i++)
+        {
+            float weightedAngle = parent1.DNA[i] * (parent1Fitness / totalFitness) + parent2.DNA[i] * (parent2Fitness / totalFitness);
+            child1DNA.Add(weightedAngle);
+        }
 
-    //    var maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
+        
 
-    //    child1DNA.AddRange(maxDna.GetRange(DNACount, maxDna.Count - DNACount));
+        var longestParent = parent1.DNA.Count > parent2.DNA.Count ? parent1 : parent2;
+        var bestParent = parent1Fitness > parent2Fitness ? parent1 : parent2;
+        if (longestParent == bestParent)
+        {
+            child1DNA.AddRange(longestParent.DNA.GetRange(DNACount, longestParent.DNA.Count - DNACount));
+        }
 
-    //    return child1DNA;
-    //}
 
-    //private List<float> unitCrossover(Agent parent1, Agent parent2)
-    //{
-    //    if (parent1 == parent2)
-    //        return parent1.DNA;
+        return new AgentData(child1DNA, bestParent.DeathIndex);
+    }
 
-    //    List<float> childDNA = new List<float>();
+    private AgentData unitCrossover(AgentData parent1, AgentData parent2)
+    {
+        if (parent1 == parent2)
+            return parent1;
 
-    //    int minDNA = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
+        List<float> childDNA = new List<float>();
 
-    //    List<float> maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
+        int minDNA = Mathf.Min(parent1.DNA.Count, parent2.DNA.Count);
 
-    //    for (int i = 0; i < minDNA; i++)
-    //    {
-    //        int pDNA = Random.Range(0, 2);
+        List<float> maxDna = parent1.DNA.Count > parent2.DNA.Count ? parent1.DNA : parent2.DNA;
 
-    //        if (pDNA == 0)
-    //            childDNA.Add(parent1.DNA[i]);
-    //        else
-    //            childDNA.Add(parent2.DNA[i]);
-    //    }
+        for (int i = 0; i < minDNA; i++)
+        {
+            int pDNA = Random.Range(0, 2);
 
-    //    childDNA.AddRange(maxDna.GetRange(minDNA, maxDna.Count - minDNA));
+            if (pDNA == 0)
+                childDNA.Add(parent1.DNA[i]);
+            else
+                childDNA.Add(parent2.DNA[i]);
+        }
 
-    //    return childDNA;
-    //}
+        var longestParent = parent1.DNA.Count > parent2.DNA.Count ? parent1 : parent2;
+        var bestParent = FitnessValues[parent1] > FitnessValues[parent2] ? parent1 : parent2;
+        if (longestParent == bestParent)
+        {
+            childDNA.AddRange(longestParent.DNA.GetRange(minDNA, longestParent.DNA.Count - minDNA));
+        }
+
+        return new AgentData(childDNA, bestParent.DeathIndex);
+    }
 
     public List<AgentData> Mutation(List<AgentData> population, float mutationRate)
     {
