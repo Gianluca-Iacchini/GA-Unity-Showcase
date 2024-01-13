@@ -176,8 +176,8 @@ public class AgentManager : MonoBehaviour
 
         CellSize = mazeGenerator._cellSize;
 
-        this.transform.position = new Vector3(startCell.transform.position.x, 1/2f + mazeGenerator._cellSize / 2f, startCell.transform.position.z);
-        Goal.transform.position = new Vector3(endCell.transform.position.x, 1.2f, endCell.transform.position.z);
+        this.transform.position = new Vector3(startCell.transform.position.x, 0.25f, startCell.transform.position.z);
+        Goal.transform.position = new Vector3(endCell.transform.position.x, 0.25f, endCell.transform.position.z);
 
         MazeDeadEnds = new bool[maze.GetLength(0), maze.GetLength(1)];
         MazeFlaggedPath = new Dictionary<Agent, bool[,]>();
@@ -261,8 +261,8 @@ public class AgentManager : MonoBehaviour
         if (!mazeCells.ContainsKey(cellKey))
         {
             cubePrimitive = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cubePrimitive.transform.localScale = new Vector3(CellSize, 0.2f + mazeGenerator._cellSize / 2f, CellSize);
-            cubePrimitive.transform.position = new Vector3(xCell * CellSize + CellSize/2f, 1f, yCell * CellSize + CellSize/2f);
+            cubePrimitive.transform.localScale = new Vector3(CellSize, 0.8f, CellSize);
+            cubePrimitive.transform.position = new Vector3(xCell * CellSize + CellSize/2f, -0.4f, yCell * CellSize + CellSize/2f);
             cubePrimitive.AddComponent<MazeCell>();
             mazeCells.Add(cellKey, cubePrimitive);
         }

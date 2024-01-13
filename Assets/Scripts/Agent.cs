@@ -11,17 +11,12 @@ public class Agent : MonoBehaviour
     
     private float DefaultTargetRadius = 10.0f;
 
-
-    private Rigidbody _rigidbody;
-
     float fromAngle = 0.0f;
     float toAngle = 0.0f;
     float t = 0.0f;
 
     [NonSerialized]
     public AgentManager Manager;
-
-    private GameObject _target;
 
     private Vector3 _lastPosition;
 
@@ -62,15 +57,9 @@ public class Agent : MonoBehaviour
             this.isDead = false;
         }
 
-        if (_target == null)
-            _target = new GameObject(this.gameObject.name + "_Target");
-        else
-            _target.SetActive(true);
-
         Vector3 newPos = this.transform.position;
         newPos += this.transform.forward * DefaultTargetRadius;
         newPos.y = this.transform.position.y;
-        _target.transform.position = newPos;
 
         _lastPosition = Manager != null ? Manager.transform.position : this.transform.position;
         PositionsAtTimestep.Clear();
@@ -105,9 +94,6 @@ public class Agent : MonoBehaviour
 
             }
         }
-
-        if (_target != null)
-            _target.SetActive(false);
     }
 
     IEnumerator SetAngles()
@@ -184,9 +170,10 @@ public class Agent : MonoBehaviour
     {
         float radius = DefaultTargetRadius;
         float speed = GetSpeed();
-        MoveTarget(radius);
-        this.transform.LookAt(_target.transform);
-        KeepDistance(radius);
+        
+        Vector3 targetPoint = MoveTargetPoint(radius);
+        this.transform.LookAt(targetPoint);
+
         if (speed > AgentData.MaxSpeed)
         {
             speed = AgentData.MaxSpeed;
@@ -228,7 +215,7 @@ public class Agent : MonoBehaviour
     {
         float multiplier = agentData.DNA.Count > 0 ? agentData.DNA[0] : AgentData.AverageSpeed;
 
-        Vector3 velocity = _target.transform.position - this.transform.position;
+        Vector3 velocity = Vector3.forward * DefaultTargetRadius;
         velocity.y = 0;
 
 
@@ -236,7 +223,7 @@ public class Agent : MonoBehaviour
     }
 
 
-    private void MoveTarget(float radius)
+    private Vector3 MoveTargetPoint(float radius)
     {
         float angle = Mathf.Lerp(fromAngle, toAngle, t/AgentData.TimeStep);
         t += Time.deltaTime;
@@ -246,17 +233,6 @@ public class Agent : MonoBehaviour
         float z = this.transform.position.z + radius * Mathf.Sin(angle);
 
         // Update the position of the Target object
-        _target.transform.position = new Vector3(x, this.transform.position.y, z);
-
-        // Increment the angle for the next frame (to move the target around the circle)
-    }
-
-    private void KeepDistance(float radius)
-    {
-        Vector3 agentToTarget = _target.transform.position - this.transform.position;
-        agentToTarget.y = 0;
-
-        float distance = agentToTarget.magnitude;
-        _target.transform.position += agentToTarget.normalized * (radius - distance);
+        return new Vector3(x, this.transform.position.y, z);
     }
 }

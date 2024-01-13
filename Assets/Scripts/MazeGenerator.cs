@@ -35,7 +35,7 @@ public class MazeGenerator : MonoBehaviour
             {
                 var cell = Instantiate(_mazeCell, this.transform.position, Quaternion.identity, this.transform);
                 cell.transform.localScale = new Vector3(_cellSize, _cellSize, _cellSize);
-                cell.transform.localPosition = new Vector3(x * _cellSize + _cellSize/2f, +_cellSize/2f, z * _cellSize + _cellSize/2f);
+                cell.transform.localPosition = new Vector3(x * _cellSize + _cellSize/2f, _cellSize/4f, z * _cellSize + _cellSize/2f);
                 _mazeGrid[x, z] = cell.GetComponent<MazeCell>();
             }
         }
