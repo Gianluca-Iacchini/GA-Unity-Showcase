@@ -78,6 +78,7 @@ public class AgentManagerEditor : Editor
         DrawHeader("UI Settings");
         agentManager._generationText = EditorGUILayout.ObjectField("Generation Text", agentManager._generationText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
         agentManager._fitnessText = EditorGUILayout.ObjectField("Fitness Text", agentManager._fitnessText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
+        agentManager._mutationText = EditorGUILayout.ObjectField("Mutation Text", agentManager._mutationText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
     }
 
     private void DrawHeader(string headerText)

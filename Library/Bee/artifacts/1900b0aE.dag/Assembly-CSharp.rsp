@@ -357,6 +357,7 @@
 "Assets/Scripts/AgentData.cs"
 "Assets/Scripts/AgentManager.cs"
 "Assets/Scripts/AgentPooler.cs"
+"Assets/Scripts/CameraControl.cs"
 "Assets/Scripts/GaussianDistribution.cs"
 "Assets/Scripts/MazeCell.cs"
 "Assets/Scripts/MazeGenerator.cs"

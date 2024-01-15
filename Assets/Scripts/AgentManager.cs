@@ -71,7 +71,9 @@ public class AgentManager : MonoBehaviour
     [HideInInspector]
     public TextMeshProUGUI _generationText;
     [HideInInspector]
-    public TextMeshProUGUI _fitnessText;
+    public TextMeshProUGUI _fitnessText;    
+    [HideInInspector]
+    public TextMeshProUGUI _mutationText;
 
     [System.NonSerialized]
     public float CellSize = 5.0f;
@@ -103,7 +105,7 @@ public class AgentManager : MonoBehaviour
     private int CompletedAgents = 0;
     private int CurrentGen = 0;
 
-
+    float oldMaxFitness = 0.0f;
 
     int nGenSimilarFitness = 0;
 
@@ -209,7 +211,7 @@ public class AgentManager : MonoBehaviour
         var mazeCell = mazeGenerator.GetCellFromVector3(agentPosition);
 
         // Decrease the value of the cell the agent is currently in (higher number means that cell is rewarded less)
-        MazeValues[cellPos.x][cellPos.y] = Mathf.Min((MazeValues[cellPos.x][cellPos.y] + Population.Count * 0.0025f), 1000000);
+        MazeValues[cellPos.x][cellPos.y] = Mathf.Min((MazeValues[cellPos.x][cellPos.y] + Population.Count * 0.001f), 1000000);
 
         int nDeadEnds = 0;
 
@@ -223,7 +225,7 @@ public class AgentManager : MonoBehaviour
             SetValueIfNotExists(vxCell, vyCell, 0.5f);
 
             var nCell = mazeGenerator.GetCell(new Vector2Int(vxCell, vyCell));
-            MazeValues[vxCell][vyCell] = Mathf.Clamp(MazeValues[vxCell][vyCell] + Population.Count * 0.00125f, 0f, 1000000);
+            MazeValues[vxCell][vyCell] = Mathf.Clamp(MazeValues[vxCell][vyCell] + Population.Count * 0.005f, 0f, 1000000);
 
             // Finds if the agent is in a dead end or near one
             if (nCell.VisibleCells.Count > 1)
@@ -450,7 +452,7 @@ public class AgentManager : MonoBehaviour
 
         totalReward *= (ExplorationReward) / (closestCellValue);
 
-        return (totalReward * travelReward) + (1f / closestCellDistance); /** travelReward + 1f;*/
+        return (totalReward * travelReward) + (1f + (1f/closestCellValue)) * (ExplorationReward / closestCellDistance);
     }
 
     /// <summary>
@@ -747,9 +749,9 @@ public class AgentManager : MonoBehaviour
     /// <returns></returns>
     public List<AgentData> Mutation(List<AgentData> population, float mutationRate)
     {
-        List<AgentData> maxAgents = FitnessValues.OrderByDescending(x => x.Value).Select(x => x.Key).Take(ElitismSize).ToList();
 
-        population.AddRange(maxAgents);
+
+
 
         foreach (var agentData in population)
         {
@@ -765,16 +767,18 @@ public class AgentManager : MonoBehaviour
 
                 for (int i = d; i < agentData.DNA.Count; i++)
                 {
-                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 2f);
+                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 4f);
                     agentData.MutateAtIndex(i, newAngle);
                 }
 
                 // Mutate the rest of the DNA with a higher chance of chosing later genes.
                 d = GaussianDistribution.RandomlySelectElement(Mathf.Max(d, 0));
-                agentData.MutateAtIndex(d, GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 2f));
+                agentData.MutateAtIndex(d, GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 4f));
             }      
             
         }
+        List<AgentData> maxAgents = FitnessValues.OrderByDescending(x => x.Value).Select(x => x.Key).Take(ElitismSize).ToList();
+        population.AddRange(maxAgents);
 
         return population;
     }
@@ -814,7 +818,7 @@ public class AgentManager : MonoBehaviour
         }
 
         // Keeps track of how many generations in a row have had similar fitness
-        if (maxFitness < SimilarFitnessThreshold)
+        if (maxFitness - oldMaxFitness > SimilarFitnessThreshold)
         {
             nGenSimilarFitness = nGenSimilarFitness + 1;
         }
@@ -822,10 +826,13 @@ public class AgentManager : MonoBehaviour
         {
             nGenSimilarFitness = 0;
         }
+
+        oldMaxFitness = Mathf.Max(maxFitness, oldMaxFitness);
         
         // Update the UI
         _generationText.text = "Generation: " + CurrentGen + "\nPopulation Size: " + oldPopulation.Count;
         _fitnessText.text = "Average: " + totalFitness / oldPopulation.Count + "\nMax: " + maxFitness;
+        _mutationText.text = "Mutation Rate: " + (MutationRate + MutationRateIncrement * nGenSimilarFitness);
 
         // Set the new population size
         int newPopSize = oldPopulation.Count + Random.Range(-NewGenerationSizeOffset, NewGenerationSizeOffset + 1);
