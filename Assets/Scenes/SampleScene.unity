@@ -2084,15 +2084,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e34c1616dabab20459128310f35eeac9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  AgentSpeed: 30
-  PopulationStartSize: 300
-  MinPopulationSize: 300
-  MaxPopulationSize: 300
+  AgentSpeed: 18
+  PopulationStartSize: 250
+  MinPopulationSize: 250
+  MaxPopulationSize: 250
   NewGenerationSizeOffset: 35
   MaxGenerations: 1000
-  TimeStep: 0.1
-  GenerationMaxTime: 1
-  GenerationTimeIncrement: 0.2
+  TimeStep: 0.15
+  GenerationMaxTime: 3
+  GenerationTimeIncrement: 0.3
   SelectionMethod: 1
   SelectionSize: 25
   TournamentSize: 75
@@ -2100,7 +2100,7 @@ MonoBehaviour:
   CrossoverMethod: 2
   MutationRate: 0.1
   MutationRateIncrement: 0.03
-  SimilarFitnessThreshold: 100
+  SimilarFitnessThreshold: 10
   DeathPenalty: 0
   DistanceReward: 1000
   LifeTimeReward: 5

@@ -759,7 +759,7 @@ public class AgentManager : MonoBehaviour
             float randomValue = Random.Range(0.0f, 1.0f);
 
             // If the child should mutate then always mutate the end where the parent died
-            if (randomValue <= mutationRate && agentData.isDead)
+            if (agentData.isDead)
             {
                 int d = System.Math.Min(agentData.DeathIndex, agentData.DNA.Count) - 2;
                 d = Mathf.Max(d, 0);
@@ -767,12 +767,15 @@ public class AgentManager : MonoBehaviour
 
                 for (int i = d; i < agentData.DNA.Count; i++)
                 {
-                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 4f);
+                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI);
                     agentData.MutateAtIndex(i, newAngle);
                 }
 
+            }
+            if (randomValue < mutationRate)
+            {
                 // Mutate the rest of the DNA with a higher chance of chosing later genes.
-                d = GaussianDistribution.RandomlySelectElement(Mathf.Max(d, 0));
+                int d = GaussianDistribution.RandomlySelectElement(agentData.DNA.Count);
                 agentData.MutateAtIndex(d, GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI / 4f));
             }      
             
@@ -818,7 +821,7 @@ public class AgentManager : MonoBehaviour
         }
 
         // Keeps track of how many generations in a row have had similar fitness
-        if (maxFitness - oldMaxFitness > SimilarFitnessThreshold)
+        if (Mathf.Abs(maxFitness - oldMaxFitness) < SimilarFitnessThreshold)
         {
             nGenSimilarFitness = nGenSimilarFitness + 1;
         }
@@ -827,7 +830,7 @@ public class AgentManager : MonoBehaviour
             nGenSimilarFitness = 0;
         }
 
-        oldMaxFitness = Mathf.Max(maxFitness, oldMaxFitness);
+        oldMaxFitness = maxFitness;
         
         // Update the UI
         _generationText.text = "Generation: " + CurrentGen + "\nPopulation Size: " + oldPopulation.Count;

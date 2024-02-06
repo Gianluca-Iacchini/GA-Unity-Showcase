@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEngine.UIElements;
 using static AgentManager;
 using TMPro;
+using UnityEditor.SceneManagement;
 
 /// <summary>
 /// Class used to customize the AgentManager inspector.
@@ -28,6 +29,8 @@ public class AgentManagerEditor : Editor
         serializedObject.Update();
 
         var agentManager = target as AgentManager;
+
+        EditorGUI.BeginChangeCheck();
 
         DrawHeader("Agent Settings");
         agentManager.AgentSpeed = EditorGUILayout.FloatField("Agent speed", agentManager.AgentSpeed);
@@ -79,6 +82,13 @@ public class AgentManagerEditor : Editor
         agentManager._generationText = EditorGUILayout.ObjectField("Generation Text", agentManager._generationText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
         agentManager._fitnessText = EditorGUILayout.ObjectField("Fitness Text", agentManager._fitnessText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
         agentManager._mutationText = EditorGUILayout.ObjectField("Mutation Text", agentManager._mutationText, typeof(TextMeshProUGUI), true) as TextMeshProUGUI;
+    
+        serializedObject.ApplyModifiedProperties();
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        }
     }
 
     private void DrawHeader(string headerText)
