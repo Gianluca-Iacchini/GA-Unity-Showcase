@@ -767,7 +767,7 @@ public class AgentManager : MonoBehaviour
 
                 for (int i = d; i < agentData.DNA.Count; i++)
                 {
-                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI);
+                    float newAngle = GaussianDistribution.GenerateRandomGaussian(0, Mathf.PI/3f);
                     agentData.MutateAtIndex(i, newAngle);
                 }
 
